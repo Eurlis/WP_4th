@@ -30,7 +30,9 @@ public class WP_4th : ModuleRules
 			"WP_4th/Variant_Shooter",
 			"WP_4th/Variant_Shooter/AI",
 			"WP_4th/Variant_Shooter/UI",
-			"WP_4th/Variant_Shooter/Weapons"
+			"WP_4th/Variant_Shooter/Weapons",
+			"WP_4th/Weapon",
+			"WP_4th/Test"
 		});
 
 		// Uncomment if you are using Slate UI

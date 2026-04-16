@@ -1,0 +1,242 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1776327709037,
+  "projectRoot": "C:\\Users\\user\\Desktop\\WP_4th",
+  "techStack": {
+    "languages": [],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "Binaries": {
+      "path": "Binaries",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776327708989,
+      "keyFiles": []
+    },
+    "Config": {
+      "path": "Config",
+      "purpose": "Configuration files",
+      "fileCount": 5,
+      "lastAccessed": 1776327708989,
+      "keyFiles": [
+        "DefaultEditor.ini",
+        "DefaultEditorPerProjectUserSettings.ini",
+        "DefaultEngine.ini",
+        "DefaultGame.ini",
+        "DefaultInput.ini"
+      ]
+    },
+    "Content": {
+      "path": "Content",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776327708990,
+      "keyFiles": []
+    },
+    "DerivedDataCache": {
+      "path": "DerivedDataCache",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776327708990,
+      "keyFiles": []
+    },
+    "Intermediate": {
+      "path": "Intermediate",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1776327708991,
+      "keyFiles": [
+        "CachedAssetRegistryDiscovery.bin",
+        "CachedAssetRegistry_0.bin",
+        "TargetInfo.Engine.json",
+        "TargetInfo.json",
+        "TargetInfo.WP_4th.json"
+      ]
+    },
+    "Saved": {
+      "path": "Saved",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1776327708992,
+      "keyFiles": [
+        "AutoScreenshot.png"
+      ]
+    },
+    "Source": {
+      "path": "Source",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1776327708992,
+      "keyFiles": [
+        "WP_4th.Target.cs",
+        "WP_4thEditor.Target.cs"
+      ]
+    },
+    "Intermediate\\Build": {
+      "path": "Intermediate\\Build",
+      "purpose": "Build output",
+      "fileCount": 2,
+      "lastAccessed": 1776327708994,
+      "keyFiles": [
+        "SourceFileCache.bin",
+        "XmlConfigCache.bin"
+      ]
+    },
+    "Saved\\Config": {
+      "path": "Saved\\Config",
+      "purpose": "Configuration files",
+      "fileCount": 0,
+      "lastAccessed": 1776327708996,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "Source\\WP_4th\\Test\\WeaponTestCharacter.cpp",
+      "accessCount": 12,
+      "lastAccessed": 1776334653538,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\ItemBase.cpp",
+      "accessCount": 5,
+      "lastAccessed": 1776328228421,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Test\\WeaponTestCharacter.h",
+      "accessCount": 5,
+      "lastAccessed": 1776334642604,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\WP_4th.Build.cs",
+      "accessCount": 4,
+      "lastAccessed": 1776332302931,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\ThrowableBase.cpp",
+      "accessCount": 2,
+      "lastAccessed": 1776328072944,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\WeaponBase.h",
+      "accessCount": 2,
+      "lastAccessed": 1776330703525,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\ItemBase.h",
+      "accessCount": 2,
+      "lastAccessed": 1776330708911,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\WeaponBase.cpp",
+      "accessCount": 2,
+      "lastAccessed": 1776332436195,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\WP_4th.h",
+      "accessCount": 1,
+      "lastAccessed": 1776327726695,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\Weapon_AR.h",
+      "accessCount": 1,
+      "lastAccessed": 1776327808675,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\Weapon_AR.cpp",
+      "accessCount": 1,
+      "lastAccessed": 1776327813060,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\Weapon_Pistol.h",
+      "accessCount": 1,
+      "lastAccessed": 1776327819643,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\Weapon_Pistol.cpp",
+      "accessCount": 1,
+      "lastAccessed": 1776327823806,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\Weapon_Shotgun.h",
+      "accessCount": 1,
+      "lastAccessed": 1776327826945,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\Weapon_Shotgun.cpp",
+      "accessCount": 1,
+      "lastAccessed": 1776327832986,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\ThrowableBase.h",
+      "accessCount": 1,
+      "lastAccessed": 1776327837274,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\Grenade.h",
+      "accessCount": 1,
+      "lastAccessed": 1776327857511,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Weapon\\Grenade.cpp",
+      "accessCount": 1,
+      "lastAccessed": 1776327870930,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Test\\WeaponTestGameMode.h",
+      "accessCount": 1,
+      "lastAccessed": 1776332293236,
+      "type": "file"
+    },
+    {
+      "path": "Source\\WP_4th\\Test\\WeaponTestGameMode.cpp",
+      "accessCount": 1,
+      "lastAccessed": 1776332297525,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
