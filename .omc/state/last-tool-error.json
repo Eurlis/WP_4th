@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd \\\"C:\\\\Users\\\\ojaej\\\\Documents\\\\Unreal Projects\\\\DigitalTwinFactory\\\" && git checkout Branch/OJJ\",\"description\":\"Checkout Branch/OJJ in DigitalTwinFactory\"}",
-  "error": "Exit code 1\nerror: pathspec 'Branch/OJJ' did not match any file(s) known to git",
-  "timestamp": "2026-04-16T15:59:24.210Z",
-  "retry_count": 1
-}
