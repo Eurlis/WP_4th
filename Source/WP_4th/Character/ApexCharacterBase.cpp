@@ -45,9 +45,19 @@ AApexCharacterBase::AApexCharacterBase()
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 
 	// ─── Speed Defaults ───────────────────────────────────────────
-	SprintSpeed = 700.f;
-	WalkSpeed   = 400.f;
-	CrouchSpeed = 200.f;
+	SprintSpeed              = 700.f;
+	WalkSpeed                = 400.f;
+	CrouchSpeed              = 200.f;
+	SlideMaxSpeed            = 1400.f;
+	SlideMinSpeed            = 250.f;
+	SlopeAccelMultiplier     = 2400.f;
+	SlideJumpSpeedMultiplier = 1.25f;
+}
+
+void AApexCharacterBase::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+	TickSlide(DeltaTime);
 }
 
 void AApexCharacterBase::BeginPlay()
@@ -159,6 +169,11 @@ void AApexCharacterBase::DoMove(float Right, float Forward)
 
 void AApexCharacterBase::DoJumpStart()
 {
+	if (bIsSliding)
+	{
+		Server_SlideJump();
+		return;
+	}
 	Jump();
 }
 
@@ -248,7 +263,8 @@ void AApexCharacterBase::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHei
 
 void AApexCharacterBase::StartSlide()
 {
-	if (bIsSprinting)
+	// 최소 스프린트 속도 이상이어야 슬라이딩 진입
+	if (GetCharacterMovement()->Velocity.Size2D() >= SprintSpeed * 0.8f)
 	{
 		Server_StartSlide();
 	}
@@ -262,17 +278,84 @@ void AApexCharacterBase::StopSlide()
 void AApexCharacterBase::Server_StartSlide_Implementation()
 {
 	bIsSliding = true;
+	Crouch();
 	Multicast_PlaySlideAnim();
 }
 
 void AApexCharacterBase::Server_StopSlide_Implementation()
 {
+	if (!bIsSliding) return;
 	bIsSliding = false;
+	UnCrouch();
+	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+}
+
+void AApexCharacterBase::Server_SlideJump_Implementation()
+{
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+
+	// 현재 수평 속도 기반으로 점프 런치 벡터 계산
+	FVector CurrentVel    = CMC->Velocity;
+	float   HorizontalSpeed = CurrentVel.Size2D();
+	float   SpeedRatio    = FMath::Clamp(HorizontalSpeed / SlideMaxSpeed, 0.f, 1.f);
+	float   JumpBoost     = FMath::Lerp(1.0f, SlideJumpSpeedMultiplier, SpeedRatio);
+
+	FVector LaunchVel = CurrentVel.GetSafeNormal2D() * HorizontalSpeed * JumpBoost;
+	LaunchVel.Z       = CMC->JumpZVelocity;
+
+	// 슬라이드 종료 후 발사
+	bIsSliding = false;
+	UnCrouch();
+	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+
+	LaunchCharacter(LaunchVel, true, true);
 }
 
 void AApexCharacterBase::Multicast_PlaySlideAnim_Implementation()
 {
 	// 추후 AnimInstance 연동
+}
+
+void AApexCharacterBase::TickSlide(float DeltaTime)
+{
+	if (!bIsSliding || !HasAuthority()) return;
+
+	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	if (!CMC->IsMovingOnGround())
+	{
+		// 공중으로 뜨면 슬라이드 종료
+		Server_StopSlide();
+		return;
+	}
+
+	// ── 경사 가속 ────────────────────────────────────────────────
+	// 바닥 노멀에서 중력의 사면 성분을 추출 → 내리막 방향 + 크기
+	FVector FloorNormal  = CMC->CurrentFloor.HitResult.Normal;
+	FVector GravityDir   = FVector(0.f, 0.f, -1.f);
+	// GravityDir의 노멀 평면 투영 = 경사 방향 벡터 (크기 = sin(경사각))
+	FVector SlopeAccelDir = GravityDir - (FVector::DotProduct(GravityDir, FloorNormal) * FloorNormal);
+	float   SlopeSin      = SlopeAccelDir.Size(); // 0=평지, 1=수직
+
+	if (SlopeSin > KINDA_SMALL_NUMBER)
+	{
+		SlopeAccelDir /= SlopeSin; // Normalize
+		CMC->Velocity += SlopeAccelDir * SlopeSin * SlopeAccelMultiplier * DeltaTime;
+	}
+
+	// ── 최대 속도 캡 ─────────────────────────────────────────────
+	float Speed2D = CMC->Velocity.Size2D();
+	if (Speed2D > SlideMaxSpeed)
+	{
+		FVector2D ClampedXY = FVector2D(CMC->Velocity.X, CMC->Velocity.Y).GetSafeNormal() * SlideMaxSpeed;
+		CMC->Velocity.X = ClampedXY.X;
+		CMC->Velocity.Y = ClampedXY.Y;
+	}
+
+	// ── 평지에서 속도가 너무 느려지면 자동 종료 ─────────────────
+	if (SlopeSin < 0.05f && Speed2D < SlideMinSpeed)
+	{
+		Server_StopSlide();
+	}
 }
 
 void AApexCharacterBase::OnRep_IsSliding()

@@ -45,6 +45,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
 	float CrouchSpeed;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Movement")
+	float SlideMaxSpeed;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement")
+	float SlideMinSpeed;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement")
+	float SlopeAccelMultiplier;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement")
+	float SlideJumpSpeedMultiplier;
+
 	// ─── Input Actions ────────────────────────────────────────────
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* JumpAction;
@@ -77,6 +89,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -128,11 +141,17 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void Server_StopSlide();
 
+	UFUNCTION(Server, Reliable)
+	void Server_SlideJump();
+
 	UFUNCTION(NetMulticast, Unreliable)
 	void Multicast_PlaySlideAnim();
 
 	UFUNCTION()
 	void OnRep_IsSliding();
+
+private:
+	void TickSlide(float DeltaTime);
 
 	// ─── Death ────────────────────────────────────────────────────
 	UFUNCTION()

@@ -28,6 +28,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsInAir;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	bool bIsSliding;
 	
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	float AnimDirection;

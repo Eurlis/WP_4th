@@ -17,5 +17,6 @@ void UWraithAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	AnimDirection = UKismetAnimationLibrary::CalculateDirection(OwnerCharacter->GetVelocity(), OwnerCharacter->GetActorRotation());
 	bIsWalking = Speed > 0.f && OwnerCharacter->GetCharacterMovement()->IsMovingOnGround();
 	bIsCrouching = OwnerCharacter->bIsCrouched;
-	bIsInAir   = OwnerCharacter->GetCharacterMovement()->IsFalling();
+	bIsInAir     = OwnerCharacter->GetCharacterMovement()->IsFalling();
+	bIsSliding   = OwnerCharacter->bIsSliding;
 }
