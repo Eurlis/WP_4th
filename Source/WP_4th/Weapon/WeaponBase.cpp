@@ -7,6 +7,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
+#include "BulletPoolManager.h"
+#include "ProjectileBase.h"
 
 AWeaponBase::AWeaponBase()
 {
@@ -38,6 +40,11 @@ AWeaponBase::AWeaponBase()
 	ReloadTime = 2.0f;
 	FireMode = EFireMode::Auto;
 	AmmoType = EAmmoType::Light;
+
+	// Projectile Defaults
+	BulletSpeed = 30000.f;
+	BulletGravityScale = 0.3f;
+	BulletPool = nullptr;
 
 	// Recoil Defaults
 	RecoilPitchMin = -0.3f;
@@ -156,6 +163,26 @@ void AWeaponBase::ServerFire_Implementation(FVector MuzzleLocation, FVector AimD
 
 void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDirection)
 {
+	// Pool 매니저 지연 바인딩
+	if (!BulletPool)
+	{
+		BulletPool = Cast<ABulletPoolManager>(
+			UGameplayStatics::GetActorOfClass(GetWorld(), ABulletPoolManager::StaticClass()));
+	}
+
+	if (BulletPool)
+	{
+		AProjectileBase* Bullet = BulletPool->GetProjectile();
+		if (Bullet)
+		{
+			Bullet->Activate(MuzzleLocation, AimDirection, BaseDamage, BulletSpeed, BulletGravityScale, OwningCharacter);
+			// 대표 trace end: 탄도 궤적 시각화는 풀에서 DrawDebugLine 처리
+			MulticastFireEffects(MuzzleLocation, MuzzleLocation + AimDirection * WeaponRange);
+			return;
+		}
+	}
+
+	// 폴백: 풀이 없거나 소진된 경우 히트스캔
 	FHitResult HitResult;
 	PerformLineTrace(MuzzleLocation, AimDirection, HitResult);
 
@@ -167,6 +194,7 @@ void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDi
 		ApplyDamage(HitResult, BaseDamage);
 	}
 
+	DrawDebugLine(GetWorld(), MuzzleLocation, TraceEnd, FColor::Red, false, 1.0f, 0, 1.0f);
 	MulticastFireEffects(MuzzleLocation, TraceEnd);
 }
 

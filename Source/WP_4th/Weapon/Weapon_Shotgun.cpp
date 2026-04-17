@@ -2,6 +2,9 @@
 
 #include "Weapon_Shotgun.h"
 #include "DrawDebugHelpers.h"
+#include "Kismet/GameplayStatics.h"
+#include "BulletPoolManager.h"
+#include "ProjectileBase.h"
 
 AWeapon_Shotgun::AWeapon_Shotgun()
 {
@@ -18,6 +21,10 @@ AWeapon_Shotgun::AWeapon_Shotgun()
 	PelletCount = 8;
 	SpreadAngle = 5.f;
 
+	// Projectile (산탄은 느리고 탄낙차 큼)
+	BulletSpeed = 20000.f;
+	BulletGravityScale = 0.5f;
+
 	// Recoil
 	RecoilPitchMin = -1.0f;
 	RecoilPitchMax = -1.5f;
@@ -31,29 +38,45 @@ AWeapon_Shotgun::AWeapon_Shotgun()
 
 void AWeapon_Shotgun::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDirection)
 {
-	float SpreadAngleRad = FMath::DegreesToRadians(SpreadAngle);
+	// Pool 매니저 지연 바인딩
+	if (!BulletPool)
+	{
+		BulletPool = Cast<ABulletPoolManager>(
+			UGameplayStatics::GetActorOfClass(GetWorld(), ABulletPoolManager::StaticClass()));
+	}
+
+	const float SpreadAngleRad = FMath::DegreesToRadians(SpreadAngle);
+	bool bAnyFiredAsProjectile = false;
 
 	for (int32 i = 0; i < PelletCount; i++)
 	{
-		// 각 펠릿에 랜덤 스프레드 적용
 		FVector PelletDirection = FMath::VRandCone(AimDirection, SpreadAngleRad);
 
+		if (BulletPool)
+		{
+			AProjectileBase* Bullet = BulletPool->GetProjectile();
+			if (Bullet)
+			{
+				Bullet->Activate(MuzzleLocation, PelletDirection, BaseDamage, BulletSpeed, BulletGravityScale, OwningCharacter);
+				bAnyFiredAsProjectile = true;
+				continue;
+			}
+		}
+
+		// 폴백: 풀 없거나 고갈 시 히트스캔 펠릿
 		FHitResult HitResult;
 		PerformLineTrace(MuzzleLocation, PelletDirection, HitResult);
 
 		FVector TraceEnd = MuzzleLocation + PelletDirection * WeaponRange;
-
 		if (HitResult.bBlockingHit)
 		{
 			TraceEnd = HitResult.ImpactPoint;
 			ApplyDamage(HitResult, BaseDamage);
 		}
 
-		// 각 펠릿에 대해 디버그 라인
 		DrawDebugLine(GetWorld(), MuzzleLocation, TraceEnd, FColor::Orange, false, 1.0f, 0, 0.5f);
 	}
 
-	// 마지막 펠릿의 end 위치로 이펙트 (대표)
 	FVector RepresentativeEnd = MuzzleLocation + AimDirection * WeaponRange;
 	MulticastFireEffects(MuzzleLocation, RepresentativeEnd);
 }

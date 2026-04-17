@@ -14,6 +14,10 @@ AWeapon_AR::AWeapon_AR()
 	FireMode = EFireMode::Auto;
 	AmmoType = EAmmoType::Light;
 
+	// Projectile (300m/s, 약간의 탄낙차)
+	BulletSpeed = 30000.f;
+	BulletGravityScale = 0.3f;
+
 	// Recoil
 	RecoilPitchMin = -0.3f;
 	RecoilPitchMax = -0.6f;

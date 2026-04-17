@@ -6,6 +6,8 @@
 #include "GameFramework/GameModeBase.h"
 #include "WeaponTestGameMode.generated.h"
 
+class ABulletPoolManager;
+
 UCLASS()
 class WP_4TH_API AWeaponTestGameMode : public AGameModeBase
 {
@@ -13,4 +15,14 @@ class WP_4TH_API AWeaponTestGameMode : public AGameModeBase
 
 public:
 	AWeaponTestGameMode();
+
+protected:
+	virtual void BeginPlay() override;
+
+public:
+	UPROPERTY(EditDefaultsOnly, Category = "Pool")
+	TSubclassOf<ABulletPoolManager> BulletPoolManagerClass;
+
+	UPROPERTY()
+	ABulletPoolManager* BulletPoolInstance;
 };

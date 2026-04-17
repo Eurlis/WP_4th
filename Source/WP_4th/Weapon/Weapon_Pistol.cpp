@@ -14,6 +14,10 @@ AWeapon_Pistol::AWeapon_Pistol()
 	FireMode = EFireMode::Semi;
 	AmmoType = EAmmoType::Light;
 
+	// Projectile (250m/s)
+	BulletSpeed = 25000.f;
+	BulletGravityScale = 0.4f;
+
 	// Recoil
 	RecoilPitchMin = -0.5f;
 	RecoilPitchMax = -0.8f;

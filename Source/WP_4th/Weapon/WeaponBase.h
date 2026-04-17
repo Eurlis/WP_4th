@@ -6,6 +6,8 @@
 #include "ItemBase.h"
 #include "WeaponBase.generated.h"
 
+class ABulletPoolManager;
+
 UENUM(BlueprintType)
 enum class EFireMode : uint8
 {
@@ -69,6 +71,16 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Stats")
 	EAmmoType AmmoType;
+
+	// ========== Projectile ==========
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Projectile")
+	float BulletSpeed;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Projectile")
+	float BulletGravityScale;
+
+	UPROPERTY()
+	ABulletPoolManager* BulletPool;
 
 	// ========== Recoil ==========
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Recoil")
