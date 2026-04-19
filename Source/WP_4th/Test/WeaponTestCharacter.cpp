@@ -6,6 +6,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "WeaponBase.h"
+#include "ThrowableBase.h"
 
 AWeaponTestCharacter::AWeaponTestCharacter()
 {
@@ -121,6 +122,10 @@ void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	{
 		EnhancedInput->BindAction(SwitchShotgunAction, ETriggerEvent::Triggered, this, &AWeaponTestCharacter::SwitchToShotgun);
 	}
+	if (SwitchGrenadeAction)
+	{
+		EnhancedInput->BindAction(SwitchGrenadeAction, ETriggerEvent::Triggered, this, &AWeaponTestCharacter::SwitchToGrenade);
+	}
 	if (TurnAction)
 	{
 		EnhancedInput->BindAction(TurnAction, ETriggerEvent::Triggered, this, &AWeaponTestCharacter::Turn);
@@ -158,7 +163,15 @@ void AWeaponTestCharacter::Look(const FInputActionValue& Value)
 
 void AWeaponTestCharacter::StartFire()
 {
-	if (CurrentWeapon)
+	if (CurrentSlot == EEquippedSlot::Grenade)
+	{
+		ThrowGrenade();
+
+		// 던진 후 자동으로 무기 슬롯으로 복귀
+		SwitchWeapon(ARClass);
+		CurrentSlot = EEquippedSlot::Weapon;
+	}
+	else if (CurrentWeapon)
 	{
 		CurrentWeapon->StartFire();
 	}
@@ -166,7 +179,7 @@ void AWeaponTestCharacter::StartFire()
 
 void AWeaponTestCharacter::StopFire()
 {
-	if (CurrentWeapon)
+	if (CurrentSlot == EEquippedSlot::Weapon && CurrentWeapon)
 	{
 		CurrentWeapon->StopFire();
 	}
@@ -213,9 +226,36 @@ void AWeaponTestCharacter::SwitchToShotgun()
 	SwitchWeapon(ShotgunClass);
 }
 
+void AWeaponTestCharacter::SwitchToGrenade()
+{
+	if (GrenadeCount <= 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left!"));
+		return;
+	}
+
+	// 현재 무기 숨기기 (Destroy 하지 말고 Hidden 처리)
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->StopFire();
+		CurrentWeapon->SetActorHiddenInGame(true);
+	}
+
+	CurrentSlot = EEquippedSlot::Grenade;
+	UE_LOG(LogTemp, Warning, TEXT("[Slot] Switched to Grenade (Count: %d)"), GrenadeCount);
+}
+
 void AWeaponTestCharacter::SwitchWeapon(TSubclassOf<AWeaponBase> NewWeaponClass)
 {
 	if (!NewWeaponClass) return;
+
+	// 수류탄 슬롯에서 무기 슬롯으로 복귀: 숨긴 무기 다시 보이게
+	if (CurrentSlot == EEquippedSlot::Grenade && CurrentWeapon)
+	{
+		CurrentWeapon->SetActorHiddenInGame(false);
+	}
+	CurrentSlot = EEquippedSlot::Weapon;
+
 	if (CurrentWeapon && CurrentWeapon->IsA(NewWeaponClass)) return;
 
 	if (CurrentWeapon)
@@ -272,4 +312,46 @@ void AWeaponTestCharacter::ClientShowHitMarker_Implementation(bool bIsHeadshot)
 FVector AWeaponTestCharacter::GetAimDirection() const
 {
 	return FirstPersonCamera->GetForwardVector();
+}
+
+void AWeaponTestCharacter::ThrowGrenade()
+{
+	if (GrenadeCount <= 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Grenade] No grenades left!"));
+		return;
+	}
+
+	if (!GrenadeClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Grenade] GrenadeClass not set!"));
+		return;
+	}
+
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	GetController()->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+	FVector SpawnLocation = CameraLocation + CameraRotation.Vector() * 100.f;
+	FRotator SpawnRotation = CameraRotation;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AThrowableBase* Grenade = GetWorld()->SpawnActor<AThrowableBase>(
+		GrenadeClass, SpawnLocation, SpawnRotation, SpawnParams);
+
+	if (Grenade)
+	{
+		FVector ThrowDirection = CameraRotation.Vector();
+		ThrowDirection.Z += 0.2f;
+		ThrowDirection.Normalize();
+
+		Grenade->ServerThrow(ThrowDirection);
+		GrenadeCount--;
+
+		UE_LOG(LogTemp, Warning, TEXT("[Grenade] Thrown! Remaining: %d"), GrenadeCount);
+	}
 }

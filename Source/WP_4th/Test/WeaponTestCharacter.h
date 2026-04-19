@@ -12,6 +12,14 @@ class USkeletalMeshComponent;
 class UInputMappingContext;
 class UInputAction;
 class AWeaponBase;
+class AThrowableBase;
+
+UENUM()
+enum class EEquippedSlot : uint8
+{
+	Weapon,
+	Grenade
+};
 
 UCLASS()
 class WP_4TH_API AWeaponTestCharacter : public ACharacter
@@ -38,6 +46,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	AWeaponBase* CurrentWeapon;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+	EEquippedSlot CurrentSlot = EEquippedSlot::Weapon;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
 	TSubclassOf<AWeaponBase> ARClass;
 
@@ -46,6 +57,12 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
 	TSubclassOf<AWeaponBase> ShotgunClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
+	TSubclassOf<AThrowableBase> GrenadeClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
+	int32 GrenadeCount = 2;
 
 	// ========== Input Actions ==========
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -76,6 +93,9 @@ public:
 	UInputAction* SwitchShotgunAction;
 
 	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* SwitchGrenadeAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* TurnAction;
 
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -100,6 +120,8 @@ protected:
 	void SwitchToAR();
 	void SwitchToPistol();
 	void SwitchToShotgun();
+	void SwitchToGrenade();
+	void ThrowGrenade();
 	void Turn(const FInputActionValue& Value);
 	void LookUp(const FInputActionValue& Value);
 };
