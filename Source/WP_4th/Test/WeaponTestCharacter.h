@@ -49,6 +49,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	EEquippedSlot CurrentSlot = EEquippedSlot::Weapon;
 
+	UPROPERTY()
+	TSubclassOf<AWeaponBase> LastWeaponClass;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
 	TSubclassOf<AWeaponBase> ARClass;
 

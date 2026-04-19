@@ -158,7 +158,23 @@ void AWeaponBase::ServerFire_Implementation(FVector MuzzleLocation, FVector AimD
 	if (bIsReloading || CurrentAmmo <= 0) return;
 
 	CurrentAmmo--;
+	LastFireTime = GetWorld()->GetTimeSeconds();
+
+	UE_LOG(LogTemp, Warning, TEXT("[Weapon] Fire! Ammo: %d / %d"), CurrentAmmo, MaxAmmo);
+
 	ProcessHit(MuzzleLocation, AimDirection);
+
+	// 자동 재장전 체크
+	if (CurrentAmmo <= 0 && !bIsReloading)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Auto-reload triggered!"));
+
+		// 풀오토 연사 멈추기
+		StopFire();
+
+		// 재장전 시작 (서버 권한 직접 실행)
+		ServerStartReload_Implementation();
+	}
 }
 
 void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDirection)

@@ -167,9 +167,18 @@ void AWeaponTestCharacter::StartFire()
 	{
 		ThrowGrenade();
 
-		// 던진 후 자동으로 무기 슬롯으로 복귀
-		SwitchWeapon(ARClass);
-		CurrentSlot = EEquippedSlot::Weapon;
+		// 수류탄 0개 되면 무기로 복귀, 아니면 수류탄 유지
+		if (GrenadeCount <= 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left, switching back to weapon"));
+
+			SwitchWeapon(LastWeaponClass ? LastWeaponClass : ARClass);
+			CurrentSlot = EEquippedSlot::Weapon;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Slot] Grenade thrown, remaining: %d"), GrenadeCount);
+		}
 	}
 	else if (CurrentWeapon)
 	{
@@ -248,6 +257,9 @@ void AWeaponTestCharacter::SwitchToGrenade()
 void AWeaponTestCharacter::SwitchWeapon(TSubclassOf<AWeaponBase> NewWeaponClass)
 {
 	if (!NewWeaponClass) return;
+
+	// 마지막 무기 기억
+	LastWeaponClass = NewWeaponClass;
 
 	// 수류탄 슬롯에서 무기 슬롯으로 복귀: 숨긴 무기 다시 보이게
 	if (CurrentSlot == EEquippedSlot::Grenade && CurrentWeapon)
