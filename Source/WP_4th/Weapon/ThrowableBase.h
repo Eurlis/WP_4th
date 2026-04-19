@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "ItemBase.h"
+#include "WeaponData.h"
 #include "ThrowableBase.generated.h"
 
 class UProjectileMovementComponent;
+class UDataTable;
 
 UCLASS(Abstract)
 class WP_4TH_API AThrowableBase : public AItemBase
@@ -22,6 +24,16 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Throwable|Components")
 	UProjectileMovementComponent* ProjectileMovement;
 
+	// --- Data ---
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throwable|Data")
+	UDataTable* WeaponDataTable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_WeaponID, Category = "Throwable|Data")
+	FName WeaponID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Throwable|Data")
+	FWeaponData CurrentWeaponData;
+
 	// --- Stats ---
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Throwable|Stats")
 	float ThrowForce;
@@ -36,6 +48,14 @@ public:
 	float ExplosionRadius;
 
 	// --- Functions ---
+	UFUNCTION(BlueprintCallable, Category = "Throwable")
+	void InitFromDataTable(FName InWeaponID);
+
+	UFUNCTION()
+	void OnRep_WeaponID();
+
+	virtual void BeginPlay() override;
+
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerThrow(FVector ThrowDirection);
 
@@ -46,4 +66,5 @@ protected:
 	FTimerHandle FuseTimerHandle;
 
 	void Explode();
+	void ApplyThrowableData(const FWeaponData& Data);
 };

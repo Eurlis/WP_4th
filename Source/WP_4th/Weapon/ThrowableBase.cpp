@@ -5,6 +5,7 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Engine/DataTable.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Character.h"
 
@@ -32,6 +33,58 @@ AThrowableBase::AThrowableBase()
 void AThrowableBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AThrowableBase, WeaponID);
+}
+
+void AThrowableBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (HasAuthority() && !WeaponID.IsNone() && WeaponDataTable)
+	{
+		InitFromDataTable(WeaponID);
+	}
+}
+
+// ==================== Data ====================
+
+void AThrowableBase::InitFromDataTable(FName InWeaponID)
+{
+	if (!WeaponDataTable)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[ThrowableBase] WeaponDataTable not set!"));
+		return;
+	}
+
+	FWeaponData* Data = WeaponDataTable->FindRow<FWeaponData>(InWeaponID, TEXT("ThrowableBase InitFromDataTable"));
+	if (!Data)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[ThrowableBase] WeaponID '%s' not found!"), *InWeaponID.ToString());
+		return;
+	}
+
+	WeaponID = InWeaponID;
+	CurrentWeaponData = *Data;
+	ApplyThrowableData(*Data);
+
+	UE_LOG(LogTemp, Warning, TEXT("[ThrowableBase] Init: %s (Dmg:%.1f Radius:%.1f Fuse:%.2f)"),
+		*Data->DisplayName.ToString(), Data->ExplosionDamage, Data->ExplosionRadius, Data->FuseTime);
+}
+
+void AThrowableBase::ApplyThrowableData(const FWeaponData& Data)
+{
+	ThrowForce = Data.ThrowForce;
+	FuseTime = Data.FuseTime;
+	ExplosionDamage = Data.ExplosionDamage;
+	ExplosionRadius = Data.ExplosionRadius;
+}
+
+void AThrowableBase::OnRep_WeaponID()
+{
+	if (!WeaponID.IsNone())
+	{
+		InitFromDataTable(WeaponID);
+	}
 }
 
 bool AThrowableBase::ServerThrow_Validate(FVector ThrowDirection)

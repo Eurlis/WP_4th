@@ -112,6 +112,9 @@ void AProjectileBase::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UP
 	if (!bIsActive) return;
 	if (OtherActor == this || OtherActor == OwnerCharacter) return;
 
+	// 다른 투사체와의 충돌 무시 (산탄총 펠릿끼리 폭발 방지)
+	if (Cast<AProjectileBase>(OtherActor)) return;
+
 	float FinalDamage = Damage;
 	FName BoneName = Hit.BoneName;
 

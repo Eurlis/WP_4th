@@ -3,6 +3,7 @@
 #include "WeaponBase.h"
 #include "Net/UnrealNetwork.h"
 #include "Engine/Engine.h"
+#include "Engine/DataTable.h"
 #include "DrawDebugHelpers.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/Character.h"
@@ -78,6 +79,77 @@ void AWeaponBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AWeaponBase, CurrentAmmo);
 	DOREPLIFETIME(AWeaponBase, bIsReloading);
 	DOREPLIFETIME(AWeaponBase, bIsFiring);
+	DOREPLIFETIME(AWeaponBase, WeaponID);
+}
+
+void AWeaponBase::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (HasAuthority() && !WeaponID.IsNone() && WeaponDataTable)
+	{
+		InitFromDataTable(WeaponID);
+	}
+}
+
+// ==================== Data ====================
+
+void AWeaponBase::InitFromDataTable(FName InWeaponID)
+{
+	if (!WeaponDataTable)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[WeaponBase] WeaponDataTable not set!"));
+		return;
+	}
+
+	FWeaponData* Data = WeaponDataTable->FindRow<FWeaponData>(InWeaponID, TEXT("WeaponBase InitFromDataTable"));
+	if (!Data)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[WeaponBase] WeaponID '%s' not found!"), *InWeaponID.ToString());
+		return;
+	}
+
+	WeaponID = InWeaponID;
+	CurrentWeaponData = *Data;
+	ApplyWeaponData(*Data);
+
+	UE_LOG(LogTemp, Warning, TEXT("[WeaponBase] Init: %s (Dmg:%.1f Ammo:%d)"),
+		*Data->DisplayName.ToString(), Data->BaseDamage, Data->MaxAmmo);
+}
+
+void AWeaponBase::ApplyWeaponData(const FWeaponData& Data)
+{
+	BaseDamage = Data.BaseDamage;
+	HeadshotMultiplier = Data.HeadshotMultiplier;
+	LegMultiplier = Data.LegMultiplier;
+	FireRate = Data.FireRate;
+	WeaponRange = Data.WeaponRange;
+	MaxAmmo = Data.MaxAmmo;
+	CurrentAmmo = Data.MaxAmmo;
+	ReloadTime = Data.ReloadTime;
+	FireMode = Data.FireMode;
+	AmmoType = Data.AmmoType;
+	BulletSpeed = Data.BulletSpeed;
+	BulletGravityScale = Data.BulletGravityScale;
+	RecoilPitchMin = Data.RecoilPitchMin;
+	RecoilPitchMax = Data.RecoilPitchMax;
+	RecoilYawMin = Data.RecoilYawMin;
+	RecoilYawMax = Data.RecoilYawMax;
+	RecoilRecoverySpeed = Data.RecoilRecoverySpeed;
+	ADSFOVMultiplier = Data.ADSFOVMultiplier;
+
+	if (Data.WeaponMesh1P && WeaponMesh1P)
+		WeaponMesh1P->SetSkeletalMesh(Data.WeaponMesh1P);
+	if (Data.WeaponMesh3P && WeaponMesh3P)
+		WeaponMesh3P->SetSkeletalMesh(Data.WeaponMesh3P);
+}
+
+void AWeaponBase::OnRep_WeaponID()
+{
+	if (!WeaponID.IsNone())
+	{
+		InitFromDataTable(WeaponID);
+	}
 }
 
 // ==================== Fire ====================
@@ -179,7 +251,26 @@ void AWeaponBase::ServerFire_Implementation(FVector MuzzleLocation, FVector AimD
 
 void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDirection)
 {
-	// Pool 매니저 지연 바인딩
+	// DataTable 기반 산탄총 처리
+	if (CurrentWeaponData.bIsShotgun)
+	{
+		const float SpreadRad = FMath::DegreesToRadians(CurrentWeaponData.SpreadAngle);
+		for (int32 i = 0; i < CurrentWeaponData.PelletCount; i++)
+		{
+			FVector SpreadDir = FMath::VRandCone(AimDirection, SpreadRad);
+			FireProjectile(MuzzleLocation, SpreadDir);
+		}
+		MulticastFireEffects(MuzzleLocation, MuzzleLocation + AimDirection * WeaponRange);
+		return;
+	}
+
+	// 단발 (AR/Pistol 등)
+	FireProjectile(MuzzleLocation, AimDirection);
+	MulticastFireEffects(MuzzleLocation, MuzzleLocation + AimDirection * WeaponRange);
+}
+
+void AWeaponBase::FireProjectile(const FVector& MuzzleLocation, const FVector& Direction)
+{
 	if (!BulletPool)
 	{
 		BulletPool = Cast<ABulletPoolManager>(
@@ -191,19 +282,16 @@ void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDi
 		AProjectileBase* Bullet = BulletPool->GetProjectile();
 		if (Bullet)
 		{
-			Bullet->Activate(MuzzleLocation, AimDirection, BaseDamage, BulletSpeed, BulletGravityScale, OwningCharacter);
-			// 대표 trace end: 탄도 궤적 시각화는 풀에서 DrawDebugLine 처리
-			MulticastFireEffects(MuzzleLocation, MuzzleLocation + AimDirection * WeaponRange);
+			Bullet->Activate(MuzzleLocation, Direction, BaseDamage, BulletSpeed, BulletGravityScale, OwningCharacter);
 			return;
 		}
 	}
 
-	// 폴백: 풀이 없거나 소진된 경우 히트스캔
+	// 폴백: 풀 없거나 고갈 시 히트스캔
 	FHitResult HitResult;
-	PerformLineTrace(MuzzleLocation, AimDirection, HitResult);
+	PerformLineTrace(MuzzleLocation, Direction, HitResult);
 
-	FVector TraceEnd = MuzzleLocation + AimDirection * WeaponRange;
-
+	FVector TraceEnd = MuzzleLocation + Direction * WeaponRange;
 	if (HitResult.bBlockingHit)
 	{
 		TraceEnd = HitResult.ImpactPoint;
@@ -211,7 +299,6 @@ void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDi
 	}
 
 	DrawDebugLine(GetWorld(), MuzzleLocation, TraceEnd, FColor::Red, false, 1.0f, 0, 1.0f);
-	MulticastFireEffects(MuzzleLocation, TraceEnd);
 }
 
 void AWeaponBase::PerformLineTrace(const FVector& Start, const FVector& Direction, FHitResult& OutHit) const

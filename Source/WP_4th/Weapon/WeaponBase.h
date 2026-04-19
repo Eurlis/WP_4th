@@ -4,24 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "ItemBase.h"
+#include "WeaponData.h"
 #include "WeaponBase.generated.h"
 
 class ABulletPoolManager;
-
-UENUM(BlueprintType)
-enum class EFireMode : uint8
-{
-	Auto	UMETA(DisplayName = "Full Auto"),
-	Semi	UMETA(DisplayName = "Semi Auto"),
-	Pump	UMETA(DisplayName = "Pump Action")
-};
-
-UENUM(BlueprintType)
-enum class EAmmoType : uint8
-{
-	Light		UMETA(DisplayName = "Light"),
-	Shotgun		UMETA(DisplayName = "Shotgun")
-};
+class UDataTable;
 
 UCLASS(Abstract)
 class WP_4TH_API AWeaponBase : public AItemBase
@@ -102,6 +89,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|ADS")
 	float ADSFOVMultiplier;
 
+	// ========== Data ==========
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon|Data")
+	UDataTable* WeaponDataTable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, ReplicatedUsing = OnRep_WeaponID, Category = "Weapon|Data")
+	FName WeaponID;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Weapon|Data")
+	FWeaponData CurrentWeaponData;
+
 	// ========== Runtime ==========
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentAmmo, BlueprintReadOnly, Category = "Weapon|Runtime")
 	int32 CurrentAmmo;
@@ -111,6 +108,15 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Runtime")
 	bool bIsFiring;
+
+	// ========== Data ==========
+	UFUNCTION(BlueprintCallable, Category = "Weapon")
+	void InitFromDataTable(FName InWeaponID);
+
+	UFUNCTION()
+	void OnRep_WeaponID();
+
+	virtual void BeginPlay() override;
 
 	// ========== Fire ==========
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
@@ -157,6 +163,8 @@ protected:
 	void ApplyDamage(const FHitResult& HitResult, float Damage);
 	void ApplyRecoil();
 	void RecoverRecoil(float DeltaTime);
+	void ApplyWeaponData(const FWeaponData& Data);
+	void FireProjectile(const FVector& MuzzleLocation, const FVector& Direction);
 
 	UFUNCTION()
 	void OnRep_CurrentAmmo();
