@@ -139,9 +139,20 @@ void AWeaponBase::ApplyWeaponData(const FWeaponData& Data)
 	ADSFOVMultiplier = Data.ADSFOVMultiplier;
 
 	if (Data.WeaponMesh1P && WeaponMesh1P)
+	{
 		WeaponMesh1P->SetSkeletalMesh(Data.WeaponMesh1P);
+		WeaponMesh1P->SetRelativeScale3D(Data.MeshScale);
+		WeaponMesh1P->SetRelativeRotation(Data.MeshRotation);
+		WeaponMesh1P->SetRelativeLocation(Data.MeshLocationOffset);
+	}
+
 	if (Data.WeaponMesh3P && WeaponMesh3P)
+	{
 		WeaponMesh3P->SetSkeletalMesh(Data.WeaponMesh3P);
+		WeaponMesh3P->SetRelativeScale3D(Data.MeshScale);
+		WeaponMesh3P->SetRelativeRotation(Data.MeshRotation);
+		WeaponMesh3P->SetRelativeLocation(Data.MeshLocationOffset);
+	}
 }
 
 void AWeaponBase::OnRep_WeaponID()
@@ -150,6 +161,52 @@ void AWeaponBase::OnRep_WeaponID()
 	{
 		InitFromDataTable(WeaponID);
 	}
+}
+
+// ==================== Muzzle ====================
+
+FVector AWeaponBase::GetMuzzleLocation() const
+{
+	static const FName MuzzleSocketName(TEXT("MuzzleSocket"));
+
+	if (WeaponMesh1P && WeaponMesh1P->DoesSocketExist(MuzzleSocketName))
+	{
+		return WeaponMesh1P->GetSocketLocation(MuzzleSocketName);
+	}
+
+	if (WeaponMesh3P && WeaponMesh3P->DoesSocketExist(MuzzleSocketName))
+	{
+		return WeaponMesh3P->GetSocketLocation(MuzzleSocketName);
+	}
+
+	if (MuzzlePoint)
+	{
+		return MuzzlePoint->GetComponentLocation();
+	}
+
+	return GetActorLocation();
+}
+
+FVector AWeaponBase::GetMuzzleForward() const
+{
+	static const FName MuzzleSocketName(TEXT("MuzzleSocket"));
+
+	if (WeaponMesh1P && WeaponMesh1P->DoesSocketExist(MuzzleSocketName))
+	{
+		return WeaponMesh1P->GetSocketRotation(MuzzleSocketName).Vector();
+	}
+
+	if (WeaponMesh3P && WeaponMesh3P->DoesSocketExist(MuzzleSocketName))
+	{
+		return WeaponMesh3P->GetSocketRotation(MuzzleSocketName).Vector();
+	}
+
+	if (MuzzlePoint)
+	{
+		return MuzzlePoint->GetForwardVector();
+	}
+
+	return GetActorForwardVector();
 }
 
 // ==================== Fire ====================
@@ -183,7 +240,9 @@ void AWeaponBase::FireShot()
 		return;
 	}
 
-	FVector MuzzleLoc = MuzzlePoint->GetComponentLocation();
+	FVector MuzzleLoc = GetMuzzleLocation();
+	UE_LOG(LogTemp, Log, TEXT("[Weapon] Firing from socket location: %s"), *MuzzleLoc.ToString());
+
 	FVector AimDir;
 
 	// Get aim direction from controller

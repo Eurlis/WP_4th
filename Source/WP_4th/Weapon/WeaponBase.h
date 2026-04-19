@@ -118,6 +118,13 @@ public:
 
 	virtual void BeginPlay() override;
 
+	// ========== Muzzle ==========
+	UFUNCTION(BlueprintCallable, Category = "Weapon")
+	FVector GetMuzzleLocation() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Weapon")
+	FVector GetMuzzleForward() const;
+
 	// ========== Fire ==========
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	virtual void StartFire();

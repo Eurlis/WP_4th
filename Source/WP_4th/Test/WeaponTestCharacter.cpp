@@ -44,41 +44,8 @@ void AWeaponTestCharacter::BeginPlay()
 		}
 	}
 
-	if (ARClass)
-	{
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = this;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(ARClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
-		if (CurrentWeapon)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[TestChar] Weapon spawned: %s"), *CurrentWeapon->GetName());
-
-			CurrentWeapon->AttachToComponent(
-				FirstPersonCamera,
-				FAttachmentTransformRules::SnapToTargetIncludingScale,
-				NAME_None);
-
-			CurrentWeapon->SetActorRelativeLocation(FVector(30.0f, 15.0f, -10.0f));
-			CurrentWeapon->SetActorRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
-
-			UE_LOG(LogTemp, Warning, TEXT("[TestChar] Weapon attached to camera"));
-
-			CurrentWeapon->OwningCharacter = this;
-			CurrentWeapon->OnEquipped();
-
-			if (CurrentWeapon->WeaponMesh1P)
-			{
-				CurrentWeapon->WeaponMesh1P->SetVisibility(true);
-				CurrentWeapon->WeaponMesh1P->SetOnlyOwnerSee(false);
-			}
-			if (CurrentWeapon->WeaponMesh3P)
-			{
-				CurrentWeapon->WeaponMesh3P->SetVisibility(false);
-			}
-		}
-	}
+	// 기본 무기 AR로 시작
+	SwitchWeaponByID(ARWeaponID);
 }
 
 void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -172,7 +139,7 @@ void AWeaponTestCharacter::StartFire()
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left, switching back to weapon"));
 
-			SwitchWeapon(LastWeaponClass ? LastWeaponClass : ARClass);
+			SwitchWeaponByID(!LastWeaponID.IsNone() ? LastWeaponID : ARWeaponID);
 			CurrentSlot = EEquippedSlot::Weapon;
 		}
 		else
@@ -222,17 +189,17 @@ void AWeaponTestCharacter::LookUp(const FInputActionValue& Value)
 
 void AWeaponTestCharacter::SwitchToAR()
 {
-	SwitchWeapon(ARClass);
+	SwitchWeaponByID(ARWeaponID);
 }
 
 void AWeaponTestCharacter::SwitchToPistol()
 {
-	SwitchWeapon(PistolClass);
+	SwitchWeaponByID(PistolWeaponID);
 }
 
 void AWeaponTestCharacter::SwitchToShotgun()
 {
-	SwitchWeapon(ShotgunClass);
+	SwitchWeaponByID(ShotgunWeaponID);
 }
 
 void AWeaponTestCharacter::SwitchToGrenade()
@@ -254,22 +221,21 @@ void AWeaponTestCharacter::SwitchToGrenade()
 	UE_LOG(LogTemp, Warning, TEXT("[Slot] Switched to Grenade (Count: %d)"), GrenadeCount);
 }
 
-void AWeaponTestCharacter::SwitchWeapon(TSubclassOf<AWeaponBase> NewWeaponClass)
+void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
 {
-	if (!NewWeaponClass) return;
-
-	// 마지막 무기 기억
-	LastWeaponClass = NewWeaponClass;
-
-	// 수류탄 슬롯에서 무기 슬롯으로 복귀: 숨긴 무기 다시 보이게
-	if (CurrentSlot == EEquippedSlot::Grenade && CurrentWeapon)
+	if (WeaponID.IsNone() || !GenericWeaponClass)
 	{
-		CurrentWeapon->SetActorHiddenInGame(false);
+		UE_LOG(LogTemp, Warning, TEXT("[TestChar] SwitchWeaponByID: invalid ID or GenericWeaponClass not set"));
+		return;
 	}
-	CurrentSlot = EEquippedSlot::Weapon;
 
-	if (CurrentWeapon && CurrentWeapon->IsA(NewWeaponClass)) return;
+	// 수류탄 모드였으면 무기 모드로 복귀
+	if (CurrentSlot == EEquippedSlot::Grenade)
+	{
+		CurrentSlot = EEquippedSlot::Weapon;
+	}
 
+	// 기존 무기 제거 (숨김 무기 포함)
 	if (CurrentWeapon)
 	{
 		CurrentWeapon->OnUnequipped();
@@ -279,36 +245,40 @@ void AWeaponTestCharacter::SwitchWeapon(TSubclassOf<AWeaponBase> NewWeaponClass)
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(NewWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
-	if (CurrentWeapon)
+	CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(GenericWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+	if (!CurrentWeapon) return;
+
+	// DataTable에서 데이터 로드
+	CurrentWeapon->InitFromDataTable(WeaponID);
+
+	CurrentWeapon->AttachToComponent(
+		FirstPersonCamera,
+		FAttachmentTransformRules::SnapToTargetIncludingScale,
+		NAME_None);
+
+	CurrentWeapon->SetActorRelativeLocation(FVector(30.0f, 15.0f, -10.0f));
+	CurrentWeapon->SetActorRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
+
+	CurrentWeapon->OwningCharacter = this;
+	CurrentWeapon->OnEquipped();
+
+	if (CurrentWeapon->WeaponMesh1P)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[TestChar] Weapon spawned: %s"), *CurrentWeapon->GetName());
-
-		CurrentWeapon->AttachToComponent(
-			FirstPersonCamera,
-			FAttachmentTransformRules::SnapToTargetIncludingScale,
-			NAME_None);
-
-		CurrentWeapon->SetActorRelativeLocation(FVector(30.0f, 15.0f, -10.0f));
-		CurrentWeapon->SetActorRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
-
-		UE_LOG(LogTemp, Warning, TEXT("[TestChar] Weapon attached to camera"));
-
-		CurrentWeapon->OwningCharacter = this;
-		CurrentWeapon->OnEquipped();
-
-		if (CurrentWeapon->WeaponMesh1P)
-		{
-			CurrentWeapon->WeaponMesh1P->SetVisibility(true);
-			CurrentWeapon->WeaponMesh1P->SetOnlyOwnerSee(false);
-		}
-		if (CurrentWeapon->WeaponMesh3P)
-		{
-			CurrentWeapon->WeaponMesh3P->SetVisibility(false);
-		}
+		CurrentWeapon->WeaponMesh1P->SetVisibility(true);
+		CurrentWeapon->WeaponMesh1P->SetOnlyOwnerSee(false);
 	}
+	if (CurrentWeapon->WeaponMesh3P)
+	{
+		CurrentWeapon->WeaponMesh3P->SetVisibility(false);
+	}
+
+	// 마지막 무기 기억
+	LastWeaponID = WeaponID;
+
+	UE_LOG(LogTemp, Warning, TEXT("[TestChar] Weapon switched to: %s"), *WeaponID.ToString());
 }
 
 void AWeaponTestCharacter::ServerApplyDamage(float Damage, ACharacter* DamageInstigator, FHitResult HitResult)
@@ -334,9 +304,9 @@ void AWeaponTestCharacter::ThrowGrenade()
 		return;
 	}
 
-	if (!GrenadeClass)
+	if (!GenericThrowableClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Grenade] GrenadeClass not set!"));
+		UE_LOG(LogTemp, Warning, TEXT("[Grenade] GenericThrowableClass not set!"));
 		return;
 	}
 
@@ -353,10 +323,13 @@ void AWeaponTestCharacter::ThrowGrenade()
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	AThrowableBase* Grenade = GetWorld()->SpawnActor<AThrowableBase>(
-		GrenadeClass, SpawnLocation, SpawnRotation, SpawnParams);
+		GenericThrowableClass, SpawnLocation, SpawnRotation, SpawnParams);
 
 	if (Grenade)
 	{
+		// DataTable에서 수류탄 데이터 로드
+		Grenade->InitFromDataTable(GrenadeWeaponID);
+
 		FVector ThrowDirection = CameraRotation.Vector();
 		ThrowDirection.Z += 0.2f;
 		ThrowDirection.Normalize();

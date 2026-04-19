@@ -42,6 +42,16 @@ struct FWeaponData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mesh")
 	USkeletalMesh* WeaponMesh3P = nullptr;
 
+	// ===== Mesh Transform (각 무기별 크기/회전 다름) =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mesh")
+	FVector MeshScale = FVector(1.f, 1.f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mesh")
+	FRotator MeshRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mesh")
+	FVector MeshLocationOffset = FVector::ZeroVector;
+
 	// ===== 공통 스탯 =====
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Stats")
 	float BaseDamage = 14.f;

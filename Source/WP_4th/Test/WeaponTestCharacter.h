@@ -49,20 +49,30 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	EEquippedSlot CurrentSlot = EEquippedSlot::Weapon;
 
+	// BP_Weapon_Generic (WeaponBase 상속 BP 하나)
+	UPROPERTY(EditAnywhere, Category = "Weapons")
+	TSubclassOf<AWeaponBase> GenericWeaponClass;
+
+	// BP_Throwable_Generic (ThrowableBase 상속 BP 하나)
+	UPROPERTY(EditAnywhere, Category = "Weapons")
+	TSubclassOf<AThrowableBase> GenericThrowableClass;
+
+	// DataTable Row 이름
+	UPROPERTY(EditAnywhere, Category = "Weapons")
+	FName ARWeaponID = "R301";
+
+	UPROPERTY(EditAnywhere, Category = "Weapons")
+	FName PistolWeaponID = "Wingman";
+
+	UPROPERTY(EditAnywhere, Category = "Weapons")
+	FName ShotgunWeaponID = "Peacekeeper";
+
+	UPROPERTY(EditAnywhere, Category = "Weapons")
+	FName GrenadeWeaponID = "FragGrenade";
+
+	// 마지막 장착 무기 (수류탄 후 복귀용)
 	UPROPERTY()
-	TSubclassOf<AWeaponBase> LastWeaponClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
-	TSubclassOf<AWeaponBase> ARClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
-	TSubclassOf<AWeaponBase> PistolClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
-	TSubclassOf<AWeaponBase> ShotgunClass;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
-	TSubclassOf<AThrowableBase> GrenadeClass;
+	FName LastWeaponID = "R301";
 
 	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
 	int32 GrenadeCount = 2;
@@ -119,7 +129,7 @@ protected:
 	void StartFire();
 	void StopFire();
 	void Reload();
-	void SwitchWeapon(TSubclassOf<AWeaponBase> NewWeaponClass);
+	void SwitchWeaponByID(FName WeaponID);
 	void SwitchToAR();
 	void SwitchToPistol();
 	void SwitchToShotgun();
