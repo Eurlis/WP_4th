@@ -17,19 +17,16 @@
 ## 프로젝트 구조 (우리가 만든 것만)
 ```
 Source/WP_4th/
-├── Weapon/                    ← 무기 시스템 (재준 담당)
-│   ├── WeaponTypes.h          ── enum: EItemState, EFireMode, EAmmoType
-│   ├── ItemBase.h/.cpp        ── 모든 아이템 최상위
-│   ├── WeaponBase.h/.cpp      ── 총기 공통 (히트스캔, 반동, RPC)
-│   ├── Weapon_AR.h/.cpp       ── 돌격소총 (풀오토, 데미지14, 탄창20)
-│   ├── Weapon_Pistol.h/.cpp   ── 권총 (반자동, 데미지18, 탄창12)
-│   ├── Weapon_Shotgun.h/.cpp  ── 산탄총 (펠릿8x11, 탄창6)
-│   ├── ThrowableBase.h/.cpp   ── 투척 공통
-│   ├── Grenade.h/.cpp         ── 수류탄 (퓨즈2초, 데미지80, 반경5m)
-│   ├── ProjectileBase.h/.cpp  ── 투사체 베이스 (Object Pool용)
-│   ├── BulletProjectile.h/.cpp── 총알 투사체
-│   └── BulletPoolManager.h/.cpp ── Object Pool 매니저
-├── Test/                      ← 무기 테스트용 (나중에 삭제)
+├── Weapon/                       ← DataTable 기반으로 통합
+│   ├── WeaponTypes.h             ── enum: EFireMode, EAmmoType
+│   ├── WeaponData.h              ── FWeaponData 구조체 (DataTable Row)
+│   ├── ItemBase.h/.cpp           ── 아이템 최상위 (EItemState 포함)
+│   ├── WeaponBase.h/.cpp         ── 총기 공통 (DataTable, MuzzleSocket)
+│   ├── ThrowableBase.h/.cpp      ── 투척 공통 (DataTable)
+│   ├── ProjectileBase.h/.cpp     ── 투사체 베이스 (Object Pool용)
+│   ├── BulletProjectile.h/.cpp   ── 총알 투사체
+│   └── BulletPoolManager.h/.cpp  ── Object Pool 매니저
+├── Test/                         ← 무기 테스트용 (나중에 삭제)
 │   ├── WeaponTestCharacter.h/.cpp
 │   └── WeaponTestGameMode.h/.cpp
 ```
@@ -77,6 +74,10 @@ Source/WP_4th/
 - [x] 테스트 캐릭터 (WeaponTestCharacter)
 - [x] 사격/재장전/무기교체 동작 확인
 - [x] 투사체 시스템 + Object Pool (ProjectileBase/BulletProjectile/BulletPoolManager)
+- [x] DataTable 리팩토링 완료 (FWeaponData 통합)
+- [x] 기존 Weapon_AR/Pistol/Shotgun/Grenade 클래스 제거 완료
+- [x] BP_Weapon_Generic + BP_Throwable_Generic 통합 완료
+- [x] MuzzleSocket 기반 발사 시스템 구현
 - [ ] 수류탄 던지기 테스트
 - [ ] 투사체 풀 PIE 테스트 (탄속/탄낙차 확인)
 - [ ] 멀티플레이 PIE 테스트
