@@ -10,6 +10,15 @@ class UInputAction;
 class USkeletalMeshComponent;
 class UCameraComponent;
 
+UENUM(BlueprintType)
+enum class ESlideAnimationPhase : uint8
+{
+	None,
+	Enter,
+	Loop,
+	Exit
+};
+
 UCLASS(abstract)
 class WP_4TH_API AApexCharacterBase : public ACharacter
 {
@@ -36,6 +45,9 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_IsSliding, BlueprintReadOnly, Category = "Movement")
 	bool bIsSliding;
 
+	UPROPERTY(ReplicatedUsing = OnRep_SlideAnimationPhase, BlueprintReadOnly, Category = "Movement")
+	ESlideAnimationPhase SlideAnimationPhase;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
 	float SprintSpeed;
 
@@ -56,6 +68,24 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Movement")
 	float SlideJumpSpeedMultiplier;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+	float SlideEnterDuration;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+	float SlideExitDuration;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+	float SlideFlatDeceleration;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+	float SlideUphillDeceleration;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+	float SlideDownhillAcceleration;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement|Slide")
+	float SlideUngroundedGracePeriod;
 
 	// ─── Input Actions ────────────────────────────────────────────
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -150,8 +180,24 @@ protected:
 	UFUNCTION()
 	void OnRep_IsSliding();
 
+	UFUNCTION()
+	void OnRep_SlideAnimationPhase();
+
 private:
+	bool CanStartSlide() const;
+	void BeginSlide();
+	void EndSlide(bool bPlayExitPhase);
+	void SetSlideAnimationPhaseState(ESlideAnimationPhase NewPhase);
+	void ApplySlideMovementSettings();
+	void RestoreDefaultMovementSettings();
 	void TickSlide(float DeltaTime);
+
+	FVector SlideDirection;
+	float SlideEnterEndTime;
+	float SlideExitEndTime;
+	float SlideUngroundedTime;
+	float DefaultGroundFriction;
+	float DefaultBrakingDecelerationWalking;
 
 	// ─── Death ────────────────────────────────────────────────────
 	UFUNCTION()

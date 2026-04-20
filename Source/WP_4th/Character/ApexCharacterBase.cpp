@@ -1,28 +1,26 @@
 #include "ApexCharacterBase.h"
-#include "Character/Components/HealthComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
+#include "Character/Components/HealthComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/DamageEvents.h"
 #include "EnhancedInputComponent.h"
-#include "InputActionValue.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "InputActionValue.h"
 #include "Net/UnrealNetwork.h"
 #include "WP_4th.h"
-#include "Engine/DamageEvents.h"
 
 AApexCharacterBase::AApexCharacterBase()
 {
 	GetCapsuleComponent()->InitCapsuleSize(55.f, 96.0f);
 
-	// ─── First Person Mesh ────────────────────────────────────────
 	FirstPersonMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("First Person Mesh"));
 	FirstPersonMesh->SetupAttachment(GetMesh());
 	FirstPersonMesh->SetOnlyOwnerSee(true);
 	FirstPersonMesh->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
 	FirstPersonMesh->SetCollisionProfileName(FName("NoCollision"));
 
-	// ─── Camera ───────────────────────────────────────────────────
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("First Person Camera"));
 	FirstPersonCameraComponent->SetupAttachment(FirstPersonMesh, FName("head"));
 	FirstPersonCameraComponent->SetRelativeLocationAndRotation(FVector(-2.8f, 5.89f, 0.0f), FRotator(0.0f, 90.0f, -90.0f));
@@ -32,26 +30,41 @@ AApexCharacterBase::AApexCharacterBase()
 	FirstPersonCameraComponent->FirstPersonFieldOfView = 70.0f;
 	FirstPersonCameraComponent->FirstPersonScale = 0.6f;
 
-	// ─── Third Person Mesh ────────────────────────────────────────
 	GetMesh()->SetOwnerNoSee(true);
 	GetMesh()->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::WorldSpaceRepresentation;
 	GetCapsuleComponent()->SetCapsuleSize(34.0f, 96.0f);
-	// ─── Movement ─────────────────────────────────────────────────
-	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
-	GetCharacterMovement()->AirControl = 0.5f;
-	GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
 
-	// ─── Health ───────────────────────────────────────────────────
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	MovementComponent->BrakingDecelerationFalling = 1500.0f;
+	MovementComponent->AirControl = 0.5f;
+	MovementComponent->NavAgentProps.bCanCrouch = true;
+
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 
-	// ─── Speed Defaults ───────────────────────────────────────────
-	SprintSpeed              = 700.f;
-	WalkSpeed                = 400.f;
-	CrouchSpeed              = 200.f;
-	SlideMaxSpeed            = 1400.f;
-	SlideMinSpeed            = 250.f;
-	SlopeAccelMultiplier     = 2400.f;
+	bIsSprinting = false;
+	bIsSliding = false;
+	SlideAnimationPhase = ESlideAnimationPhase::None;
+
+	SprintSpeed = 700.f;
+	WalkSpeed = 400.f;
+	CrouchSpeed = 200.f;
+	SlideMaxSpeed = 1400.f;
+	SlideMinSpeed = 250.f;
+	SlopeAccelMultiplier = 2400.f;
 	SlideJumpSpeedMultiplier = 1.25f;
+	SlideEnterDuration = 0.16f;
+	SlideExitDuration = 0.20f;
+	SlideFlatDeceleration = 950.f;
+	SlideUphillDeceleration = 1650.f;
+	SlideDownhillAcceleration = 900.f;
+	SlideUngroundedGracePeriod = 0.15f;
+
+	SlideDirection = FVector::ForwardVector;
+	SlideEnterEndTime = 0.f;
+	SlideExitEndTime = 0.f;
+	SlideUngroundedTime = 0.f;
+	DefaultGroundFriction = MovementComponent->GroundFriction;
+	DefaultBrakingDecelerationWalking = MovementComponent->BrakingDecelerationWalking;
 }
 
 void AApexCharacterBase::Tick(float DeltaTime)
@@ -64,7 +77,10 @@ void AApexCharacterBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	MovementComponent->MaxWalkSpeed = WalkSpeed;
+	DefaultGroundFriction = MovementComponent->GroundFriction;
+	DefaultBrakingDecelerationWalking = MovementComponent->BrakingDecelerationWalking;
 	DefaultFirstPersonMeshLocation = FirstPersonMesh->GetRelativeLocation();
 
 	if (HasAuthority() && IsValid(HealthComponent))
@@ -79,10 +95,9 @@ void AApexCharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 
 	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		// ─── Base ─────────────────────────────────────────────────
 		if (JumpAction)
 		{
-			EIC->BindAction(JumpAction, ETriggerEvent::Started,   this, &AApexCharacterBase::DoJumpStart);
+			EIC->BindAction(JumpAction, ETriggerEvent::Started, this, &AApexCharacterBase::DoJumpStart);
 			EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &AApexCharacterBase::DoJumpEnd);
 		}
 
@@ -101,24 +116,21 @@ void AApexCharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 			EIC->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AApexCharacterBase::LookInput);
 		}
 
-		// ─── Sprint ───────────────────────────────────────────────
 		if (SprintAction)
 		{
-			EIC->BindAction(SprintAction, ETriggerEvent::Started,   this, &AApexCharacterBase::StartSprint);
+			EIC->BindAction(SprintAction, ETriggerEvent::Started, this, &AApexCharacterBase::StartSprint);
 			EIC->BindAction(SprintAction, ETriggerEvent::Completed, this, &AApexCharacterBase::StopSprint);
 		}
 
-		// ─── Crouch ───────────────────────────────────────────────
 		if (CrouchAction)
 		{
-			EIC->BindAction(CrouchAction, ETriggerEvent::Started,   this, &AApexCharacterBase::StartCrouch);
+			EIC->BindAction(CrouchAction, ETriggerEvent::Started, this, &AApexCharacterBase::StartCrouch);
 			EIC->BindAction(CrouchAction, ETriggerEvent::Completed, this, &AApexCharacterBase::StopCrouch);
 		}
 
-		// ─── Slide ────────────────────────────────────────────────
 		if (SlideAction)
 		{
-			EIC->BindAction(SlideAction, ETriggerEvent::Started,   this, &AApexCharacterBase::StartSlide);
+			EIC->BindAction(SlideAction, ETriggerEvent::Started, this, &AApexCharacterBase::StartSlide);
 			EIC->BindAction(SlideAction, ETriggerEvent::Completed, this, &AApexCharacterBase::StopSlide);
 		}
 	}
@@ -133,19 +145,18 @@ void AApexCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AApexCharacterBase, bIsSprinting);
 	DOREPLIFETIME(AApexCharacterBase, bIsSliding);
+	DOREPLIFETIME(AApexCharacterBase, SlideAnimationPhase);
 }
-
-// ─── Base Input ───────────────────────────────────────────────────────────────
 
 void AApexCharacterBase::MoveInput(const FInputActionValue& Value)
 {
-	FVector2D MovementVector = Value.Get<FVector2D>();
+	const FVector2D MovementVector = Value.Get<FVector2D>();
 	DoMove(MovementVector.X, MovementVector.Y);
 }
 
 void AApexCharacterBase::LookInput(const FInputActionValue& Value)
 {
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
+	const FVector2D LookAxisVector = Value.Get<FVector2D>();
 	DoAim(LookAxisVector.X, LookAxisVector.Y);
 }
 
@@ -162,7 +173,7 @@ void AApexCharacterBase::DoMove(float Right, float Forward)
 {
 	if (GetController())
 	{
-		AddMovementInput(GetActorRightVector(),   Right);
+		AddMovementInput(GetActorRightVector(), Right);
 		AddMovementInput(GetActorForwardVector(), Forward);
 	}
 }
@@ -174,6 +185,7 @@ void AApexCharacterBase::DoJumpStart()
 		Server_SlideJump();
 		return;
 	}
+
 	Jump();
 }
 
@@ -182,13 +194,13 @@ void AApexCharacterBase::DoJumpEnd()
 	StopJumping();
 }
 
-// ─── Damage ───────────────────────────────────────────────────────────────────
-
 float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 	AController* EventInstigator, AActor* DamageCauser)
 {
-	if (!HasAuthority()) return 0.f;
-	if (!IsValid(HealthComponent)) return 0.f;
+	if (!HasAuthority() || !IsValid(HealthComponent))
+	{
+		return 0.f;
+	}
 
 	bool bIsHeadshot = false;
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
@@ -200,8 +212,6 @@ float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& Dam
 	HealthComponent->ApplyDamage(DamageAmount, bIsHeadshot);
 	return DamageAmount;
 }
-
-// ─── Sprint ───────────────────────────────────────────────────────────────────
 
 void AApexCharacterBase::StartSprint()
 {
@@ -225,32 +235,33 @@ void AApexCharacterBase::Server_StartSprint_Implementation()
 void AApexCharacterBase::Server_StopSprint_Implementation()
 {
 	bIsSprinting = false;
-	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = bIsSliding ? SlideMaxSpeed : WalkSpeed;
 }
 
 void AApexCharacterBase::OnRep_IsSprinting()
 {
-	// 애니메이션 블루프린트 연동 시 여기서 처리
 }
-
-// ─── Crouch ───────────────────────────────────────────────────────────────────
 
 void AApexCharacterBase::StartCrouch()
 {
-	Crouch();
+	if (!bIsSliding)
+	{
+		Crouch();
+	}
 }
 
 void AApexCharacterBase::StopCrouch()
 {
-	UnCrouch();
+	if (!bIsSliding)
+	{
+		UnCrouch();
+	}
 }
 
 void AApexCharacterBase::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
-	FirstPersonMesh->SetRelativeLocation(
-		DefaultFirstPersonMeshLocation + FVector(0.f, 0.f, -ScaledHalfHeightAdjust)
-	);
+	FirstPersonMesh->SetRelativeLocation(DefaultFirstPersonMeshLocation + FVector(0.f, 0.f, -ScaledHalfHeightAdjust));
 }
 
 void AApexCharacterBase::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
@@ -259,12 +270,18 @@ void AApexCharacterBase::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHei
 	FirstPersonMesh->SetRelativeLocation(DefaultFirstPersonMeshLocation);
 }
 
-// ─── Slide ────────────────────────────────────────────────────────────────────
+bool AApexCharacterBase::CanStartSlide() const
+{
+	const UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	return !bIsSliding
+		&& MovementComponent
+		&& MovementComponent->IsMovingOnGround()
+		&& MovementComponent->Velocity.Size2D() >= SprintSpeed * 0.8f;
+}
 
 void AApexCharacterBase::StartSlide()
 {
-	// 최소 스프린트 속도 이상이어야 슬라이딩 진입
-	if (GetCharacterMovement()->Velocity.Size2D() >= SprintSpeed * 0.8f)
+	if (CanStartSlide())
 	{
 		Server_StartSlide();
 	}
@@ -277,93 +294,214 @@ void AApexCharacterBase::StopSlide()
 
 void AApexCharacterBase::Server_StartSlide_Implementation()
 {
-	bIsSliding = true;
-	Crouch();
+	if (!CanStartSlide())
+	{
+		return;
+	}
+
+	BeginSlide();
 	Multicast_PlaySlideAnim();
 }
 
 void AApexCharacterBase::Server_StopSlide_Implementation()
 {
-	if (!bIsSliding) return;
-	bIsSliding = false;
-	UnCrouch();
-	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	EndSlide(true);
 }
 
 void AApexCharacterBase::Server_SlideJump_Implementation()
 {
-	UCharacterMovementComponent* CMC = GetCharacterMovement();
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	const FVector CurrentVelocity = MovementComponent->Velocity;
+	const FVector HorizontalVelocity = FVector(CurrentVelocity.X, CurrentVelocity.Y, 0.f);
+	const float HorizontalSpeed = HorizontalVelocity.Size();
+	const float SpeedRatio = FMath::Clamp(HorizontalSpeed / SlideMaxSpeed, 0.f, 1.f);
+	const float JumpBoost = FMath::Lerp(1.0f, SlideJumpSpeedMultiplier, SpeedRatio);
 
-	// 현재 수평 속도 기반으로 점프 런치 벡터 계산
-	FVector CurrentVel    = CMC->Velocity;
-	float   HorizontalSpeed = CurrentVel.Size2D();
-	float   SpeedRatio    = FMath::Clamp(HorizontalSpeed / SlideMaxSpeed, 0.f, 1.f);
-	float   JumpBoost     = FMath::Lerp(1.0f, SlideJumpSpeedMultiplier, SpeedRatio);
+	FVector LaunchVelocity = HorizontalVelocity.GetSafeNormal() * HorizontalSpeed * JumpBoost;
+	LaunchVelocity.Z = MovementComponent->JumpZVelocity;
 
-	FVector LaunchVel = CurrentVel.GetSafeNormal2D() * HorizontalSpeed * JumpBoost;
-	LaunchVel.Z       = CMC->JumpZVelocity;
-
-	// 슬라이드 종료 후 발사
-	bIsSliding = false;
-	UnCrouch();
-	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
-
-	LaunchCharacter(LaunchVel, true, true);
+	EndSlide(false);
+	LaunchCharacter(LaunchVelocity, true, true);
 }
 
 void AApexCharacterBase::Multicast_PlaySlideAnim_Implementation()
 {
-	// 추후 AnimInstance 연동
+}
+
+void AApexCharacterBase::BeginSlide()
+{
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	const FVector HorizontalVelocity(MovementComponent->Velocity.X, MovementComponent->Velocity.Y, 0.f);
+
+	SlideDirection = HorizontalVelocity.GetSafeNormal();
+	if (SlideDirection.IsNearlyZero())
+	{
+		SlideDirection = GetActorForwardVector().GetSafeNormal();
+	}
+
+	SlideUngroundedTime = 0.f;
+	Crouch();
+	bIsSliding = true;
+	ApplySlideMovementSettings();
+	SetSlideAnimationPhaseState(ESlideAnimationPhase::Enter);
+
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	SlideEnterEndTime = CurrentTime + SlideEnterDuration;
+	SlideExitEndTime = 0.f;
+}
+
+void AApexCharacterBase::EndSlide(bool bPlayExitPhase)
+{
+	if (!bIsSliding && (!bPlayExitPhase || SlideAnimationPhase == ESlideAnimationPhase::None))
+	{
+		return;
+	}
+
+	bIsSliding = false;
+	RestoreDefaultMovementSettings();
+	UnCrouch();
+
+	if (bPlayExitPhase)
+	{
+		SetSlideAnimationPhaseState(ESlideAnimationPhase::Exit);
+		SlideExitEndTime = GetWorld()->GetTimeSeconds() + SlideExitDuration;
+	}
+	else
+	{
+		SetSlideAnimationPhaseState(ESlideAnimationPhase::None);
+		SlideExitEndTime = 0.f;
+	}
+}
+
+void AApexCharacterBase::SetSlideAnimationPhaseState(ESlideAnimationPhase NewPhase)
+{
+	SlideAnimationPhase = NewPhase;
+}
+
+void AApexCharacterBase::ApplySlideMovementSettings()
+{
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	MovementComponent->GroundFriction = 0.0f;
+	MovementComponent->BrakingDecelerationWalking = 0.0f;
+	MovementComponent->MaxWalkSpeed = SlideMaxSpeed;
+}
+
+void AApexCharacterBase::RestoreDefaultMovementSettings()
+{
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	MovementComponent->GroundFriction = DefaultGroundFriction;
+	MovementComponent->BrakingDecelerationWalking = DefaultBrakingDecelerationWalking;
+	MovementComponent->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
 }
 
 void AApexCharacterBase::TickSlide(float DeltaTime)
 {
-	if (!bIsSliding || !HasAuthority()) return;
-
-	UCharacterMovementComponent* CMC = GetCharacterMovement();
-	if (!CMC->IsMovingOnGround())
+	if (HasAuthority() && SlideAnimationPhase == ESlideAnimationPhase::Exit && SlideExitEndTime > 0.f)
 	{
-		// 공중으로 뜨면 슬라이드 종료
-		Server_StopSlide();
+		if (GetWorld()->GetTimeSeconds() >= SlideExitEndTime)
+		{
+			SetSlideAnimationPhaseState(ESlideAnimationPhase::None);
+			SlideExitEndTime = 0.f;
+		}
+	}
+
+	if (!bIsSliding || !HasAuthority())
+	{
 		return;
 	}
 
-	// ── 경사 가속 ────────────────────────────────────────────────
-	// 바닥 노멀에서 중력의 사면 성분을 추출 → 내리막 방향 + 크기
-	FVector FloorNormal  = CMC->CurrentFloor.HitResult.Normal;
-	FVector GravityDir   = FVector(0.f, 0.f, -1.f);
-	// GravityDir의 노멀 평면 투영 = 경사 방향 벡터 (크기 = sin(경사각))
-	FVector SlopeAccelDir = GravityDir - (FVector::DotProduct(GravityDir, FloorNormal) * FloorNormal);
-	float   SlopeSin      = SlopeAccelDir.Size(); // 0=평지, 1=수직
-
-	if (SlopeSin > KINDA_SMALL_NUMBER)
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	if (!MovementComponent)
 	{
-		SlopeAccelDir /= SlopeSin; // Normalize
-		CMC->Velocity += SlopeAccelDir * SlopeSin * SlopeAccelMultiplier * DeltaTime;
+		return;
 	}
 
-	// ── 최대 속도 캡 ─────────────────────────────────────────────
-	float Speed2D = CMC->Velocity.Size2D();
-	if (Speed2D > SlideMaxSpeed)
+	if (!MovementComponent->IsMovingOnGround())
 	{
-		FVector2D ClampedXY = FVector2D(CMC->Velocity.X, CMC->Velocity.Y).GetSafeNormal() * SlideMaxSpeed;
-		CMC->Velocity.X = ClampedXY.X;
-		CMC->Velocity.Y = ClampedXY.Y;
+		SlideUngroundedTime += DeltaTime;
+		if (SlideUngroundedTime >= SlideUngroundedGracePeriod)
+		{
+			EndSlide(true);
+		}
+		return;
 	}
 
-	// ── 평지에서 속도가 너무 느려지면 자동 종료 ─────────────────
-	if (SlopeSin < 0.05f && Speed2D < SlideMinSpeed)
+	SlideUngroundedTime = 0.f;
+
+	if (SlideAnimationPhase == ESlideAnimationPhase::Enter && GetWorld()->GetTimeSeconds() >= SlideEnterEndTime)
 	{
-		Server_StopSlide();
+		SetSlideAnimationPhaseState(ESlideAnimationPhase::Loop);
+	}
+
+	const FVector FloorNormal = MovementComponent->CurrentFloor.HitResult.IsValidBlockingHit()
+		? MovementComponent->CurrentFloor.HitResult.Normal.GetSafeNormal()
+		: FVector::UpVector;
+	const FVector PlaneVelocity = FVector::VectorPlaneProject(MovementComponent->Velocity, FloorNormal);
+	FVector MoveDirection = PlaneVelocity.GetSafeNormal();
+
+	if (MoveDirection.IsNearlyZero())
+	{
+		MoveDirection = FVector::VectorPlaneProject(SlideDirection, FloorNormal).GetSafeNormal();
+	}
+
+	if (MoveDirection.IsNearlyZero())
+	{
+		EndSlide(true);
+		return;
+	}
+
+	SlideDirection = MoveDirection;
+
+	const FVector DownhillVector = FVector::VectorPlaneProject(FVector(0.f, 0.f, -1.f), FloorNormal);
+	const FVector DownhillDirection = DownhillVector.GetSafeNormal();
+	const float SlopeAmount = DownhillVector.Size();
+	const float DownhillAlignment = FVector::DotProduct(MoveDirection, DownhillDirection);
+	const float UphillAlignment = FMath::Max(-DownhillAlignment, 0.f);
+	const float CurrentSpeed = PlaneVelocity.Size();
+
+	float SpeedDelta = -SlideFlatDeceleration * DeltaTime;
+	SpeedDelta -= UphillAlignment * SlopeAmount * SlideUphillDeceleration * DeltaTime;
+	SpeedDelta += FMath::Max(DownhillAlignment, 0.f) * SlopeAmount * SlideDownhillAcceleration * DeltaTime;
+	SpeedDelta += FMath::Max(DownhillAlignment, 0.f) * SlopeAmount * SlopeAccelMultiplier * DeltaTime;
+
+	const float NewSpeed = FMath::Clamp(CurrentSpeed + SpeedDelta, 0.f, SlideMaxSpeed);
+	if (NewSpeed <= KINDA_SMALL_NUMBER)
+	{
+		EndSlide(true);
+		return;
+	}
+
+	MovementComponent->Velocity = MoveDirection * NewSpeed;
+
+	if (NewSpeed < SlideMinSpeed && DownhillAlignment <= 0.05f)
+	{
+		EndSlide(true);
 	}
 }
 
 void AApexCharacterBase::OnRep_IsSliding()
 {
-	// 클라이언트 연출 처리 (카메라 FOV 등)
+	if (bIsSliding)
+	{
+		ApplySlideMovementSettings();
+		if (SlideAnimationPhase == ESlideAnimationPhase::None)
+		{
+			SetSlideAnimationPhaseState(ESlideAnimationPhase::Enter);
+		}
+	}
+	else
+	{
+		RestoreDefaultMovementSettings();
+		if (SlideAnimationPhase == ESlideAnimationPhase::Loop)
+		{
+			SetSlideAnimationPhaseState(ESlideAnimationPhase::Exit);
+		}
+	}
 }
 
-// ─── Death ────────────────────────────────────────────────────────────────────
+void AApexCharacterBase::OnRep_SlideAnimationPhase()
+{
+}
 
 void AApexCharacterBase::HandleDeath()
 {

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Animation/AnimInstance.h"
+#include "Character/ApexCharacterBase.h"
 #include "KismetAnimationLibrary.h"
 #include "WraithAnimInstance.generated.h"
 
@@ -31,6 +32,18 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	bool bIsSliding;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	bool bIsSlideEntering;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	bool bIsSlideExiting;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	float SlideSpeed;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	ESlideAnimationPhase SlidePhase;
 	
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	float AnimDirection;
