@@ -114,6 +114,19 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* LookUpAction;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* AimAction;
+
+	// ========== ADS / Camera ==========
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float DefaultFOV = 90.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Camera")
+	float ADSInterpSpeed = 12.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Movement")
+	float ADSWalkSpeedMultiplier = 0.6f;
+
 	// ========== Weapon System Stubs ==========
 	UFUNCTION()
 	void ServerApplyDamage(float Damage, ACharacter* DamageInstigator, FHitResult HitResult);
@@ -122,6 +135,8 @@ public:
 	void ClientShowHitMarker(bool bIsHeadshot);
 
 	FVector GetAimDirection() const;
+
+	virtual void Tick(float DeltaTime) override;
 
 protected:
 	void Move(const FInputActionValue& Value);
@@ -137,4 +152,8 @@ protected:
 	void ThrowGrenade();
 	void Turn(const FInputActionValue& Value);
 	void LookUp(const FInputActionValue& Value);
+	void OnAimStarted();
+	void OnAimStopped();
+
+	float SavedDefaultWalkSpeed = 0.f;
 };

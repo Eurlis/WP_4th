@@ -5,12 +5,13 @@
 #include "Components/CapsuleComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "WeaponBase.h"
 #include "ThrowableBase.h"
 
 AWeaponTestCharacter::AWeaponTestCharacter()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
 
 	FirstPersonCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FirstPersonCamera"));
 	FirstPersonCamera->SetupAttachment(GetCapsuleComponent());
@@ -46,6 +47,33 @@ void AWeaponTestCharacter::BeginPlay()
 
 	// 기본 무기 AR로 시작
 	SwitchWeaponByID(ARWeaponID);
+
+	// 카메라 기본 FOV 적용
+	if (FirstPersonCamera)
+	{
+		FirstPersonCamera->SetFieldOfView(DefaultFOV);
+	}
+
+	// 이동 속도 원본 저장
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		SavedDefaultWalkSpeed = MoveComp->MaxWalkSpeed;
+	}
+}
+
+void AWeaponTestCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (!FirstPersonCamera) return;
+
+	const bool bAiming = CurrentWeapon && CurrentWeapon->bIsAiming && CurrentSlot == EEquippedSlot::Weapon;
+	const float Multiplier = bAiming ? CurrentWeapon->GetADSFOVMultiplier() : 1.0f;
+	const float TargetFOV = DefaultFOV * Multiplier;
+
+	const float CurrentFOV = FirstPersonCamera->FieldOfView;
+	const float NewFOV = FMath::FInterpTo(CurrentFOV, TargetFOV, DeltaTime, ADSInterpSpeed);
+	FirstPersonCamera->SetFieldOfView(NewFOV);
 }
 
 void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -100,6 +128,44 @@ void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	if (LookUpAction)
 	{
 		EnhancedInput->BindAction(LookUpAction, ETriggerEvent::Triggered, this, &AWeaponTestCharacter::LookUp);
+	}
+	if (AimAction)
+	{
+		EnhancedInput->BindAction(AimAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::OnAimStarted);
+		EnhancedInput->BindAction(AimAction, ETriggerEvent::Completed, this, &AWeaponTestCharacter::OnAimStopped);
+		EnhancedInput->BindAction(AimAction, ETriggerEvent::Canceled, this, &AWeaponTestCharacter::OnAimStopped);
+	}
+}
+
+void AWeaponTestCharacter::OnAimStarted()
+{
+	if (CurrentSlot != EEquippedSlot::Weapon || !CurrentWeapon) return;
+
+	CurrentWeapon->StartAiming();
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		if (SavedDefaultWalkSpeed <= 0.f)
+		{
+			SavedDefaultWalkSpeed = MoveComp->MaxWalkSpeed;
+		}
+		MoveComp->MaxWalkSpeed = SavedDefaultWalkSpeed * ADSWalkSpeedMultiplier;
+	}
+}
+
+void AWeaponTestCharacter::OnAimStopped()
+{
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->StopAiming();
+	}
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		if (SavedDefaultWalkSpeed > 0.f)
+		{
+			MoveComp->MaxWalkSpeed = SavedDefaultWalkSpeed;
+		}
 	}
 }
 

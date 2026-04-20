@@ -58,6 +58,9 @@ void AProjectileBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 void AProjectileBase::Activate(FVector SpawnLocation, FVector Direction, float InDamage, float InSpeed, float InGravity, ACharacter* Shooter)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[Bullet] Activate: Loc=%s, Dir=%s, Speed=%.1f"),
+		*SpawnLocation.ToString(), *Direction.ToString(), InSpeed);
+
 	Damage = InDamage;
 	BulletSpeed = InSpeed;
 	GravityScale = InGravity;
@@ -75,6 +78,13 @@ void AProjectileBase::Activate(FVector SpawnLocation, FVector Direction, float I
 		ProjectileMovement->Velocity = NormalizedDir * BulletSpeed;
 		ProjectileMovement->SetUpdatedComponent(CollisionComp);
 		ProjectileMovement->Activate(true);
+
+		UE_LOG(LogTemp, Log, TEXT("[Bullet] ProjectileMovement activated, Velocity=%s"),
+			*ProjectileMovement->Velocity.ToString());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Bullet] ProjectileMovement is NULL!"));
 	}
 
 	bIsActive = true;
@@ -82,10 +92,23 @@ void AProjectileBase::Activate(FVector SpawnLocation, FVector Direction, float I
 	SetActorEnableCollision(true);
 	SetActorTickEnabled(true);
 
+	if (BulletMesh)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Bullet] Mesh visible: %s, StaticMesh=%s"),
+			BulletMesh->IsVisible() ? TEXT("YES") : TEXT("NO"),
+			BulletMesh->GetStaticMesh() ? *BulletMesh->GetStaticMesh()->GetName() : TEXT("NULL"));
+	}
+
 	GetWorldTimerManager().ClearTimer(LifeSpanTimerHandle);
 	GetWorldTimerManager().SetTimer(LifeSpanTimerHandle, this, &AProjectileBase::Deactivate, LifeSpan, false);
 
-	DrawDebugLine(GetWorld(), SpawnLocation, SpawnLocation + NormalizedDir * 500.f, FColor::Yellow, false, 1.0f, 0, 1.0f);
+	// 디버그: 총알 시작 위치 (노란 구, 3초) + 초기 방향 라인
+	if (UWorld* World = GetWorld())
+	{
+		DrawDebugSphere(World, SpawnLocation, 15.0f, 12, FColor::Yellow, false, 3.0f);
+		DrawDebugLine(World, SpawnLocation, SpawnLocation + NormalizedDir * 500.f, FColor::Yellow, false, 1.0f, 0, 1.0f);
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("[Projectile] Activated: Speed=%.1f, Direction=%s"), BulletSpeed, *NormalizedDir.ToString());
 }
 

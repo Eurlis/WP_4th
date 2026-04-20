@@ -79,7 +79,34 @@ void AWeaponBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AWeaponBase, CurrentAmmo);
 	DOREPLIFETIME(AWeaponBase, bIsReloading);
 	DOREPLIFETIME(AWeaponBase, bIsFiring);
+	DOREPLIFETIME(AWeaponBase, bIsAiming);
+	DOREPLIFETIME(AWeaponBase, bIsBursting);
+	DOREPLIFETIME(AWeaponBase, CurrentBurstCount);
 	DOREPLIFETIME(AWeaponBase, WeaponID);
+}
+
+// ==================== ADS ====================
+
+void AWeaponBase::StartAiming()
+{
+	bIsAiming = true;
+	ServerSetAiming(true);
+}
+
+void AWeaponBase::StopAiming()
+{
+	bIsAiming = false;
+	ServerSetAiming(false);
+}
+
+void AWeaponBase::ServerSetAiming_Implementation(bool bNewAiming)
+{
+	bIsAiming = bNewAiming;
+}
+
+float AWeaponBase::GetADSFOVMultiplier() const
+{
+	return ADSFOVMultiplier > 0.f ? ADSFOVMultiplier : 1.0f;
 }
 
 void AWeaponBase::BeginPlay()
@@ -211,18 +238,41 @@ FVector AWeaponBase::GetMuzzleForward() const
 
 // ==================== Fire ====================
 
+bool AWeaponBase::CanFireNow() const
+{
+	if (bIsReloading) return false;
+	if (CurrentAmmo <= 0) return false;
+
+	if (const UWorld* World = GetWorld())
+	{
+		const float TimeSinceLastFire = World->GetTimeSeconds() - LastFireTime;
+		if (TimeSinceLastFire < FireRate) return false;
+	}
+
+	return true;
+}
+
 void AWeaponBase::StartFire()
 {
-	if (bIsReloading || CurrentAmmo <= 0) return;
+	if (!CanFireNow()) return;
+
+	// Burst 진행 중이면 재클릭 무시 (서버 권한 플래그; 리플리케이션 지연 창 없을 때 추가 안전망)
+	if (FireMode == EFireMode::Burst && bIsBursting) return;
 
 	bIsFiring = true;
 
-	// Fire first shot immediately
+	// Fire first shot immediately (gated by CanFireNow already)
 	FireShot();
 
 	if (FireMode == EFireMode::Auto)
 	{
 		GetWorldTimerManager().SetTimer(FireTimerHandle, this, &AWeaponBase::FireShot, FireRate, true);
+	}
+	else
+	{
+		// Semi / Pump / Burst: single press → single shot; next shot gated by FireRate on next StartFire
+		// TODO(Burst): implement multi-shot burst with BurstShotCount / BurstInterval once DataTable fields added
+		bIsFiring = false;
 	}
 }
 
@@ -234,14 +284,22 @@ void AWeaponBase::StopFire()
 
 void AWeaponBase::FireShot()
 {
-	if (bIsReloading || CurrentAmmo <= 0)
+	if (!CanFireNow())
 	{
-		StopFire();
+		if (CurrentAmmo <= 0 || bIsReloading)
+		{
+			StopFire();
+		}
 		return;
 	}
 
+	// Mark local fire time so CanFireNow() gates subsequent presses/ticks on the client.
+	// Server-side authoritative LastFireTime is set in ServerFire_Implementation.
+	LastFireTime = GetWorld()->GetTimeSeconds();
+
 	FVector MuzzleLoc = GetMuzzleLocation();
-	UE_LOG(LogTemp, Log, TEXT("[Weapon] Firing from socket location: %s"), *MuzzleLoc.ToString());
+	UE_LOG(LogTemp, Log, TEXT("[Weapon] Fired at %.2f, Next available at %.2f (MuzzleLoc: %s)"),
+		LastFireTime, LastFireTime + FireRate, *MuzzleLoc.ToString());
 
 	FVector AimDir;
 
@@ -271,12 +329,6 @@ void AWeaponBase::FireShot()
 
 	// Local recoil
 	ApplyRecoil();
-
-	// Semi / Pump: one shot only
-	if (FireMode == EFireMode::Semi || FireMode == EFireMode::Pump)
-	{
-		StopFire();
-	}
 }
 
 bool AWeaponBase::ServerFire_Validate(FVector MuzzleLocation, FVector AimDirection)
@@ -286,27 +338,147 @@ bool AWeaponBase::ServerFire_Validate(FVector MuzzleLocation, FVector AimDirecti
 
 void AWeaponBase::ServerFire_Implementation(FVector MuzzleLocation, FVector AimDirection)
 {
+	// NOTE: cooldown gate lives client-side in CanFireNow() — if we also gated the server here,
+	// on a listen-server host the client's FireShot sets LastFireTime first, then this RPC self-blocks
+	// in the same frame and CurrentAmmo never decrements (infinite ammo bug).
 	if (bIsReloading || CurrentAmmo <= 0) return;
 
-	CurrentAmmo--;
+	// Burst 모드: 단발 소비 없이 서버 타이머로 N발 시퀀스 실행
+	if (FireMode == EFireMode::Burst)
+	{
+		if (bIsBursting) return;
+		StartBurstFire(MuzzleLocation, AimDirection);
+		return;
+	}
+
+	CurrentAmmo = FMath::Max(0, CurrentAmmo - 1);
 	LastFireTime = GetWorld()->GetTimeSeconds();
 
-	UE_LOG(LogTemp, Warning, TEXT("[Weapon] Fire! Ammo: %d / %d"), CurrentAmmo, MaxAmmo);
+	UE_LOG(LogTemp, Warning, TEXT("[Ammo] Current: %d/%d"), CurrentAmmo, MaxAmmo);
 
 	ProcessHit(MuzzleLocation, AimDirection);
 
 	// 자동 재장전 체크
 	if (CurrentAmmo <= 0 && !bIsReloading)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Weapon] Auto-reload triggered!"));
+		UE_LOG(LogTemp, Warning, TEXT("[Ammo] Empty - Auto reload"));
 
 		// 풀오토 연사 멈추기
 		StopFire();
 
-		// 재장전 시작 (서버 권한 직접 실행)
-		ServerStartReload_Implementation();
+		// 살짝 딜레이 후 재장전 (연사 막 끝난 프레임에 곧바로 장전 애니 밀리지 않게)
+		FTimerHandle AutoReloadHandle;
+		GetWorldTimerManager().SetTimer(
+			AutoReloadHandle,
+			FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				if (!bIsReloading && HasAuthority())
+				{
+					ServerStartReload_Implementation();
+				}
+			}),
+			0.3f, false
+		);
 	}
 }
+
+// ==================== Burst ====================
+
+void AWeaponBase::StartBurstFire(const FVector& MuzzleLocation, const FVector& AimDirection)
+{
+	if (!HasAuthority()) return;
+
+	const int32 MaxBurst = CurrentWeaponData.BurstShotCount > 0 ? CurrentWeaponData.BurstShotCount : 3;
+	const float Interval = CurrentWeaponData.BurstInterval > 0.f ? CurrentWeaponData.BurstInterval : 0.06f;
+
+	UE_LOG(LogTemp, Warning, TEXT("[Burst] START - Count:%d, Interval:%.3fs"), MaxBurst, Interval);
+
+	bIsBursting = true;
+	CurrentBurstCount = 0;
+	CachedBurstMuzzle = MuzzleLocation;
+	CachedBurstDir = AimDirection;
+
+	FireBurstShot();
+}
+
+void AWeaponBase::FireBurstShot()
+{
+	if (!HasAuthority())
+	{
+		EndBurstFire();
+		return;
+	}
+
+	const int32 MaxBurst = CurrentWeaponData.BurstShotCount > 0 ? CurrentWeaponData.BurstShotCount : 3;
+	const float Interval = CurrentWeaponData.BurstInterval > 0.f ? CurrentWeaponData.BurstInterval : 0.06f;
+
+	if (bIsReloading)
+	{
+		EndBurstFire();
+		return;
+	}
+
+	if (CurrentAmmo <= 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Burst] Ammo ran out at shot %d"), CurrentBurstCount);
+		EndBurstFire();
+		if (!bIsReloading)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Ammo] Empty - Auto reload"));
+			ServerStartReload_Implementation();
+		}
+		return;
+	}
+
+	// 현재 에이밍 방향 재취득 (버스트 중 에임 이동 반영)
+	FVector MuzzleLoc = GetMuzzleLocation();
+	FVector AimDir = CachedBurstDir;
+	if (OwningCharacter)
+	{
+		if (APlayerController* PC = Cast<APlayerController>(OwningCharacter->GetController()))
+		{
+			FVector CamLoc;
+			FRotator CamRot;
+			PC->GetPlayerViewPoint(CamLoc, CamRot);
+			AimDir = CamRot.Vector();
+		}
+	}
+
+	CurrentAmmo = FMath::Max(0, CurrentAmmo - 1);
+	LastFireTime = GetWorld()->GetTimeSeconds();
+	CurrentBurstCount++;
+
+	UE_LOG(LogTemp, Log, TEXT("[Burst] Shot %d/%d fired, Ammo:%d/%d"),
+		CurrentBurstCount, MaxBurst, CurrentAmmo, MaxAmmo);
+
+	ProcessHit(MuzzleLoc, AimDir);
+
+	if (CurrentBurstCount < MaxBurst && CurrentAmmo > 0)
+	{
+		GetWorldTimerManager().SetTimer(BurstTimerHandle, this, &AWeaponBase::FireBurstShot, Interval, false);
+	}
+	else
+	{
+		const bool bOutOfAmmo = (CurrentAmmo <= 0);
+		EndBurstFire();
+		if (bOutOfAmmo && !bIsReloading)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Ammo] Empty - Auto reload"));
+			ServerStartReload_Implementation();
+		}
+	}
+}
+
+void AWeaponBase::EndBurstFire()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Burst] END - Fired %d shots"), CurrentBurstCount);
+
+	GetWorldTimerManager().ClearTimer(BurstTimerHandle);
+	bIsBursting = false;
+	CurrentBurstCount = 0;
+}
+
+// ==================== Hit ====================
 
 void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDirection)
 {
@@ -330,18 +502,54 @@ void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDi
 
 void AWeaponBase::FireProjectile(const FVector& MuzzleLocation, const FVector& Direction)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[Fire] Muzzle: %s, AimDir: %s, Speed=%.1f"),
+		*MuzzleLocation.ToString(), *Direction.ToString(), BulletSpeed);
+
+	// 디버그: 발사 방향 라인 + 총구 위치 구체 (1초간)
+	if (UWorld* World = GetWorld())
+	{
+		const FVector EndLoc = MuzzleLocation + Direction * 5000.0f;
+		DrawDebugLine(World, MuzzleLocation, EndLoc, FColor::Red, false, 1.0f, 0, 2.0f);
+		DrawDebugSphere(World, MuzzleLocation, 20.0f, 12, FColor::Green, false, 1.0f);
+	}
+
 	if (!BulletPool)
 	{
 		BulletPool = Cast<ABulletPoolManager>(
 			UGameplayStatics::GetActorOfClass(GetWorld(), ABulletPoolManager::StaticClass()));
 	}
 
-	if (BulletPool)
+	if (!BulletPool)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[Fire] BulletPool is NULL! Falling back to hitscan."));
+	}
+	else
 	{
 		AProjectileBase* Bullet = BulletPool->GetProjectile();
-		if (Bullet)
+		if (!Bullet)
 		{
+			UE_LOG(LogTemp, Error, TEXT("[Fire] No available bullet in pool!"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("[Fire] Got bullet: %s"), *Bullet->GetName());
+
 			Bullet->Activate(MuzzleLocation, Direction, BaseDamage, BulletSpeed, BulletGravityScale, OwningCharacter);
+
+			const FVector ActualVel = Direction.GetSafeNormal() * BulletSpeed;
+			UE_LOG(LogTemp, Warning, TEXT("[Fire] Bullet activated at %s with velocity %s"),
+				*Bullet->GetActorLocation().ToString(), *ActualVel.ToString());
+
+			if (Bullet->BulletMesh)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[Fire] Bullet mesh visible: %s, StaticMesh=%s"),
+					Bullet->BulletMesh->IsVisible() ? TEXT("YES") : TEXT("NO"),
+					Bullet->BulletMesh->GetStaticMesh() ? *Bullet->BulletMesh->GetStaticMesh()->GetName() : TEXT("NULL"));
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("[Fire] Bullet BulletMesh component is NULL!"));
+			}
 			return;
 		}
 	}
@@ -438,6 +646,8 @@ void AWeaponBase::ServerStartReload_Implementation()
 	bIsReloading = true;
 	StopFire();
 
+	UE_LOG(LogTemp, Warning, TEXT("[Reload] Started - duration: %.2fs"), ReloadTime);
+
 	GetWorldTimerManager().SetTimer(ReloadTimerHandle, this, &AWeaponBase::FinishReload, ReloadTime, false);
 }
 
@@ -445,6 +655,8 @@ void AWeaponBase::FinishReload()
 {
 	CurrentAmmo = MaxAmmo;
 	bIsReloading = false;
+
+	UE_LOG(LogTemp, Warning, TEXT("[Reload] Finished - Ammo: %d/%d"), CurrentAmmo, MaxAmmo);
 }
 
 // ==================== Equip ====================
@@ -458,6 +670,12 @@ void AWeaponBase::OnEquipped()
 void AWeaponBase::OnUnequipped()
 {
 	StopFire();
+
+	// 버스트 진행 중이었다면 즉시 중단
+	GetWorldTimerManager().ClearTimer(BurstTimerHandle);
+	bIsBursting = false;
+	CurrentBurstCount = 0;
+
 	WeaponMesh1P->SetVisibility(false);
 	WeaponMesh3P->SetVisibility(false);
 }

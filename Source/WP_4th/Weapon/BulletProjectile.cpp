@@ -2,7 +2,10 @@
 
 #include "BulletProjectile.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Engine/StaticMesh.h"
 
 ABulletProjectile::ABulletProjectile()
 {
@@ -20,5 +23,17 @@ ABulletProjectile::ABulletProjectile()
 		ProjectileMovement->InitialSpeed = BulletSpeed;
 		ProjectileMovement->MaxSpeed = BulletSpeed * 2.f;
 		ProjectileMovement->ProjectileGravityScale = GravityScale;
+	}
+
+	// BulletMesh가 비어있으면 기본 Engine Sphere로 대체 (BP에서 덮어쓸 수 있음)
+	if (BulletMesh && !BulletMesh->GetStaticMesh())
+	{
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultSphere(TEXT("/Engine/BasicShapes/Sphere"));
+		if (DefaultSphere.Succeeded())
+		{
+			BulletMesh->SetStaticMesh(DefaultSphere.Object);
+			BulletMesh->SetRelativeScale3D(FVector(0.05f));
+			BulletMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
 	}
 }
