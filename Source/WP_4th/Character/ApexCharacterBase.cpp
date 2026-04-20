@@ -1,7 +1,7 @@
 #include "ApexCharacterBase.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
-#include "Character/Components/HealthComponent.h"
+#include "Character/Components/HPComp/HealthComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/DamageEvents.h"
@@ -40,7 +40,7 @@ AApexCharacterBase::AApexCharacterBase()
 	MovementComponent->NavAgentProps.bCanCrouch = true;
 
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
-
+	PakComp = CreateDefaultSubobject<UPakousComponent>(TEXT("PakComp"));
 	bIsSprinting = false;
 	bIsSliding = false;
 	SlideAnimationPhase = ESlideAnimationPhase::None;
@@ -185,7 +185,10 @@ void AApexCharacterBase::DoJumpStart()
 		Server_SlideJump();
 		return;
 	}
-
+	if (PakComp && PakComp->CanWallJump())
+	{
+		return;
+	}
 	Jump();
 }
 

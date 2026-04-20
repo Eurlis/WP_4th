@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
+#include "Components/PakourComp/PakousComponent.h"
 #include "ApexCharacterBase.generated.h"
 
 class UHealthComponent;
@@ -37,7 +38,8 @@ public:
 	// ─── Components ───────────────────────────────────────────────
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UHealthComponent* HealthComponent;
-
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category= "Components")
+	UPakousComponent* PakComp;
 	// ─── Movement State ───────────────────────────────────────────
 	UPROPERTY(ReplicatedUsing = OnRep_IsSprinting, BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting;
