@@ -10,12 +10,16 @@ enum class EFireMode : uint8
 {
 	Auto	UMETA(DisplayName = "Full Auto"),
 	Semi	UMETA(DisplayName = "Semi Auto"),
-	Pump	UMETA(DisplayName = "Pump Action")
+	Pump	UMETA(DisplayName = "Pump Action"),
+	Burst	UMETA(DisplayName = "Burst")
 };
 
 UENUM(BlueprintType)
 enum class EAmmoType : uint8
 {
 	Light		UMETA(DisplayName = "Light"),
-	Shotgun		UMETA(DisplayName = "Shotgun")
+	Shotgun		UMETA(DisplayName = "Shotgun"),
+	Heavy		UMETA(DisplayName = "Heavy"),
+	Energy		UMETA(DisplayName = "Energy"),
+	Sniper		UMETA(DisplayName = "Sniper")
 };
