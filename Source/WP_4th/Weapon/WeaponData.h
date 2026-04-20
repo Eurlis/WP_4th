@@ -9,6 +9,7 @@
 
 class AProjectileBase;
 class USkeletalMesh;
+class UStaticMesh;
 class UTexture2D;
 class UParticleSystem;
 class USoundBase;
@@ -133,6 +134,21 @@ struct FWeaponData : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable")
 	float ExplosionRadius = 500.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable")
+	bool bIsSticky = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable", meta=(EditCondition="bIsSticky"))
+	float StickyDamage = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable")
+	UStaticMesh* ThrowableMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable")
+	FVector ThrowableMeshScale = FVector(1.f, 1.f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable")
+	FRotator ThrowableMeshRotation = FRotator::ZeroRotator;
 
 	// ===== 이펙트/사운드 =====
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")

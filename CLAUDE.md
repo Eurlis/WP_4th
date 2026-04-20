@@ -78,6 +78,11 @@ Source/WP_4th/
 - [x] 기존 Weapon_AR/Pistol/Shotgun/Grenade 클래스 제거 완료
 - [x] BP_Weapon_Generic + BP_Throwable_Generic 통합 완료
 - [x] MuzzleSocket 기반 발사 시스템 구현
+- [x] enum 확장 (Burst, Heavy, Energy, Sniper)
+- [x] Arc Star 필드 추가 (bIsSticky, StickyDamage)
+- [x] 수류탄 Static Mesh 필드 추가
+- [ ] Arc Star 부착 로직 구현 (대기)
+- [ ] Thermite 지속 화염 로직 (대기)
 - [ ] 수류탄 던지기 테스트
 - [ ] 투사체 풀 PIE 테스트 (탄속/탄낙차 확인)
 - [ ] 멀티플레이 PIE 테스트

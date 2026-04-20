@@ -2,6 +2,8 @@
 
 #include "ThrowableBase.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
@@ -77,6 +79,13 @@ void AThrowableBase::ApplyThrowableData(const FWeaponData& Data)
 	FuseTime = Data.FuseTime;
 	ExplosionDamage = Data.ExplosionDamage;
 	ExplosionRadius = Data.ExplosionRadius;
+
+	if (Data.ThrowableMesh && PickupMesh)
+	{
+		PickupMesh->SetStaticMesh(Data.ThrowableMesh);
+		PickupMesh->SetRelativeScale3D(Data.ThrowableMeshScale);
+		PickupMesh->SetRelativeRotation(Data.ThrowableMeshRotation);
+	}
 }
 
 void AThrowableBase::OnRep_WeaponID()
