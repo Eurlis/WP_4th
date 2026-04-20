@@ -109,6 +109,22 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Runtime")
 	bool bIsFiring;
 
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|ADS")
+	bool bIsAiming = false;
+
+	// ========== ADS ==========
+	UFUNCTION(BlueprintCallable, Category = "Weapon|ADS")
+	void StartAiming();
+
+	UFUNCTION(BlueprintCallable, Category = "Weapon|ADS")
+	void StopAiming();
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetAiming(bool bNewAiming);
+
+	UFUNCTION(BlueprintPure, Category = "Weapon|ADS")
+	float GetADSFOVMultiplier() const;
+
 	// ========== Data ==========
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	void InitFromDataTable(FName InWeaponID);

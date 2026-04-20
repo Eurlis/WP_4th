@@ -79,7 +79,32 @@ void AWeaponBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AWeaponBase, CurrentAmmo);
 	DOREPLIFETIME(AWeaponBase, bIsReloading);
 	DOREPLIFETIME(AWeaponBase, bIsFiring);
+	DOREPLIFETIME(AWeaponBase, bIsAiming);
 	DOREPLIFETIME(AWeaponBase, WeaponID);
+}
+
+// ==================== ADS ====================
+
+void AWeaponBase::StartAiming()
+{
+	bIsAiming = true;
+	ServerSetAiming(true);
+}
+
+void AWeaponBase::StopAiming()
+{
+	bIsAiming = false;
+	ServerSetAiming(false);
+}
+
+void AWeaponBase::ServerSetAiming_Implementation(bool bNewAiming)
+{
+	bIsAiming = bNewAiming;
+}
+
+float AWeaponBase::GetADSFOVMultiplier() const
+{
+	return ADSFOVMultiplier > 0.f ? ADSFOVMultiplier : 1.0f;
 }
 
 void AWeaponBase::BeginPlay()
