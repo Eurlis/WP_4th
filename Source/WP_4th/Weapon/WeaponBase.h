@@ -112,6 +112,13 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|ADS")
 	bool bIsAiming = false;
 
+	// ========== Burst ==========
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Burst")
+	bool bIsBursting = false;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Burst")
+	int32 CurrentBurstCount = 0;
+
 	// ========== ADS ==========
 	UFUNCTION(BlueprintCallable, Category = "Weapon|ADS")
 	void StartAiming();
@@ -142,6 +149,12 @@ public:
 	FVector GetMuzzleForward() const;
 
 	// ========== Fire ==========
+	UPROPERTY(BlueprintReadOnly, Category = "Weapon|Fire")
+	float LastFireTime;
+
+	UFUNCTION(BlueprintPure, Category = "Weapon|Fire")
+	bool CanFireNow() const;
+
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	virtual void StartFire();
 
@@ -152,6 +165,11 @@ public:
 	void ServerFire(FVector MuzzleLocation, FVector AimDirection);
 
 	virtual void ProcessHit(const FVector& MuzzleLocation, const FVector& AimDirection);
+
+	// ========== Burst (서버 권한) ==========
+	void StartBurstFire(const FVector& MuzzleLocation, const FVector& AimDirection);
+	void FireBurstShot();
+	void EndBurstFire();
 
 	// ========== Reload ==========
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
@@ -174,7 +192,11 @@ public:
 protected:
 	FTimerHandle FireTimerHandle;
 	FTimerHandle ReloadTimerHandle;
-	float LastFireTime;
+	FTimerHandle BurstTimerHandle;
+
+	// Burst 시작 시점의 총구 / 에임 캐시 (서버에서만 사용)
+	FVector CachedBurstMuzzle = FVector::ZeroVector;
+	FVector CachedBurstDir = FVector::ForwardVector;
 
 	// Recoil accumulation (local)
 	float CurrentRecoilPitch;

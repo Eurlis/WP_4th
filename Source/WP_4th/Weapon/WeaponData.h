@@ -82,6 +82,13 @@ struct FWeaponData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm")
 	EAmmoType AmmoType = EAmmoType::Light;
 
+	// ===== Burst 사격 (FireMode == Burst 일 때만 사용) =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Burst")
+	int32 BurstShotCount = 3;  // Hemlok=3, Nemesis=4
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Burst")
+	float BurstInterval = 0.06f;  // 버스트 내 발사 간격(초)
+
 	// ===== 투사체 =====
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Projectile")
 	TSubclassOf<AProjectileBase> ProjectileClass;

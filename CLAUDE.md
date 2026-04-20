@@ -82,7 +82,8 @@ Source/WP_4th/
 - [x] Arc Star 필드 추가 (bIsSticky, StickyDamage)
 - [x] 수류탄 Static Mesh 필드 추가
 - [x] ADS 줌 시스템 (Longbow 우클릭, FOV 보간 + 이동속도 감소)
-- [ ] Burst 사격 로직 구현 (진행 예정)
+- [x] Semi/Pump/Auto FireRate 쿨다운 정확히 적용 (CanFireNow + 클라/서버 이중 게이트)
+- [x] Burst 사격 로직 (Hemlok 3점사, Nemesis 4점사 — 서버 타이머 기반)
 - [ ] Arc Star 부착 로직 구현 (대기)
 - [ ] Thermite 지속 화염 로직 (대기)
 - [ ] 수류탄 던지기 테스트
