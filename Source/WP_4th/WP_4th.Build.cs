@@ -21,10 +21,12 @@ public class WP_4th : ModuleRules
 			"Slate"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "AnimGraphRuntime" });
+		PrivateDependencyModuleNames.AddRange(new string[] { });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"WP_4th",
+			"WP_4th/Variant_Horror",
+			"WP_4th/Variant_Horror/UI",
 			"WP_4th/Variant_Shooter",
 			"WP_4th/Variant_Shooter/AI",
 			"WP_4th/Variant_Shooter/UI",
