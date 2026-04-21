@@ -97,3 +97,12 @@ Plugins/**/Intermediate/*
 
 # oh-my-claudecode local state
 .omc/
+
+.itea/
+
+Content/__ExternalActors__/
+Content/__ExternalObjects__/
+
+Config/DefaultEditorPerProjectUserSettings.ini
+
+*.ispc.obj
