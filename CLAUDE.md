@@ -87,6 +87,8 @@ Source/WP_4th/
 - [x] Arc Star 부착 로직 구현 (OnComponentHit + AttachToActor)
 - [x] Thermite 충돌 즉시 폭발 + AFireZone (bIsIncendiary 플래그 기반)
 - [x] 매직 스트링 제거 (WeaponID → bIsSticky/bIsIncendiary 플래그 분기)
+- [x] 수류탄 궤적 Apex화 (ThrowableGravityScale / ThrowableBounciness DataTable 주입)
+- [x] Thermite 화염 수평 확장 (FireZone: Sphere→Box, 투척 방향 회전)
 - [ ] 수류탄 던지기 테스트
 - [ ] 투사체 풀 PIE 테스트 (탄속/탄낙차 확인)
 - [ ] 멀티플레이 PIE 테스트

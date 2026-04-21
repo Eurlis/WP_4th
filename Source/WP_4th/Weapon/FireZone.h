@@ -6,7 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "FireZone.generated.h"
 
-class USphereComponent;
+class UBoxComponent;
 class UStaticMeshComponent;
 
 UCLASS()
@@ -25,11 +25,12 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	// 수평 확장 박스 (직사각형 화염)
 	UPROPERTY(VisibleAnywhere, Category = "FireZone")
-	USphereComponent* DamageSphere;
+	TObjectPtr<UBoxComponent> DamageBox;
 
 	UPROPERTY(VisibleAnywhere, Category = "FireZone")
-	UStaticMeshComponent* VisualMesh;
+	TObjectPtr<UStaticMeshComponent> VisualMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FireZone")
 	float Duration = 5.0f;
@@ -40,8 +41,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FireZone")
 	float DamagePerTick = 20.0f;
 
+	// 박스 반크기: X=앞뒤(짧음), Y=좌우(김), Z=위아래 (실제 크기 = 값 × 2)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FireZone")
-	float Radius = 400.0f;
+	FVector BoxExtent = FVector(200.0f, 600.0f, 100.0f);
 
 	UPROPERTY()
 	AActor* DamageInstigator = nullptr;

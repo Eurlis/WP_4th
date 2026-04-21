@@ -154,6 +154,17 @@ void AThrowableBase::ServerThrow_Implementation(FVector ThrowDirection)
 		PickupMesh->IgnoreActorWhenMoving(OwnerActor, true);
 	}
 
+	// === Physics 파라미터 DataTable 주입 (Apex 스타일 궤적) ===
+	if (ProjectileMovement)
+	{
+		ProjectileMovement->ProjectileGravityScale = CurrentWeaponData.ThrowableGravityScale;
+		ProjectileMovement->Bounciness = CurrentWeaponData.ThrowableBounciness;
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[Throw] %s - Gravity:%.2f Bounciness:%.2f"),
+	       *WeaponID.ToString(),
+	       CurrentWeaponData.ThrowableGravityScale,
+	       CurrentWeaponData.ThrowableBounciness);
+
 	// === Arc Star 전용 설정 (bIsSticky=true) ===
 	if (CurrentWeaponData.bIsSticky)
 	{
@@ -182,7 +193,15 @@ void AThrowableBase::ServerThrow_Implementation(FVector ThrowDirection)
 	// === Thermite 전용 설정 (bIsIncendiary=true): 충돌 즉시 폭발 ===
 	if (CurrentWeaponData.bIsIncendiary)
 	{
+		PickupMesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+		PickupMesh->SetNotifyRigidBodyCollision(true);
 		ProjectileMovement->bShouldBounce = false;
+
+		// Owner 물리 충돌 무시 (던진 직후 본인 캡슐과 충돌 방지)
+		if (GetOwner())
+		{
+			PickupMesh->IgnoreActorWhenMoving(GetOwner(), true);
+		}
 
 		if (!PickupMesh->OnComponentHit.IsAlreadyBound(this, &AThrowableBase::OnImpactExplode))
 		{
@@ -261,9 +280,15 @@ void AThrowableBase::OnImpactExplode(UPrimitiveComponent* HitComp, AActor* Other
                                      FVector NormalImpulse, const FHitResult& Hit)
 {
 	if (!HasAuthority()) return;
-	if (!CurrentWeaponData.bIsIncendiary) return;
 	if (OtherActor == this) return;
-	// NOTE: 시전자(Owner)와 충돌해도 폭발 (Apex 스타일 자해 허용)
+
+	// 시전자 자신과의 충돌은 무시 (던진 직후 본인 캡슐 충돌로 즉시 터지는 것 방지)
+	if (OtherActor == GetOwner())
+	{
+		return;
+	}
+
+	if (!CurrentWeaponData.bIsIncendiary) return;
 
 	UE_LOG(LogTemp, Warning,
 	       TEXT("[Incendiary] Impact: %s at %s -> Explode"),
@@ -367,6 +392,18 @@ void AThrowableBase::Explode()
 			ClassToSpawn = CurrentWeaponData.FireZoneClass;
 		}
 
+		// 투척 방향 계산 (Velocity 수평 성분 → FireZone 회전)
+		FRotator SpawnRotation = FRotator::ZeroRotator;
+		if (ProjectileMovement)
+		{
+			FVector HorizontalVel = ProjectileMovement->Velocity;
+			HorizontalVel.Z = 0.0f;
+			if (!HorizontalVel.IsNearlyZero())
+			{
+				SpawnRotation = HorizontalVel.Rotation();
+			}
+		}
+
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = OwningCharacter;
 		SpawnParams.SpawnCollisionHandlingOverride =
@@ -375,7 +412,7 @@ void AThrowableBase::Explode()
 		AFireZone* FireZone = GetWorld()->SpawnActor<AFireZone>(
 			ClassToSpawn,
 			ExplosionLocation,
-			FRotator::ZeroRotator,
+			SpawnRotation,								// 투척 방향으로 수평 확장
 			SpawnParams
 		);
 
@@ -390,8 +427,9 @@ void AThrowableBase::Explode()
 			);
 
 			UE_LOG(LogTemp, Warning,
-			       TEXT("[Incendiary] FireZone spawned at %s (class: %s)"),
+			       TEXT("[Thermite] FireZone spawned at %s, rotation=%s (class: %s)"),
 			       *ExplosionLocation.ToString(),
+			       *SpawnRotation.ToString(),
 			       *ClassToSpawn->GetName());
 		}
 		else

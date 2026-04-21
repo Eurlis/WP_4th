@@ -151,6 +151,17 @@ struct FWeaponData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable", meta=(EditCondition="bIsSticky"))
 	float StickyDamage = 10.f;
 
+	// ===== 투척 궤적 커스터마이징 (Apex 스타일) =====
+	// 권장값:
+	//   FragGrenade: ThrowForce=2800, GravityScale=2.0, Bounciness=0.3
+	//   Thermite:    ThrowForce=2800, GravityScale=2.0, Bounciness=0.0
+	//   ArcStar:     ThrowForce=3200, GravityScale=1.5, Bounciness=0.0
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Physics")
+	float ThrowableGravityScale = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Physics")
+	float ThrowableBounciness = 0.3f;
+
 	// ===== 소이탄 (Incendiary) - Thermite 등 =====
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary")
 	bool bIsIncendiary = false;

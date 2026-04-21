@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "FireZone.h"
-#include "Components/SphereComponent.h"
+#include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
@@ -14,26 +14,29 @@ AFireZone::AFireZone()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
-	SetReplicateMovement(false); // 정적 액터 - 위치 복제 불필요
+	SetReplicateMovement(true); // 회전 복제 필요 (투척 방향 화염)
 
-	DamageSphere = CreateDefaultSubobject<USphereComponent>(TEXT("DamageSphere"));
-	RootComponent = DamageSphere;
-	DamageSphere->SetSphereRadius(400.0f);
-	DamageSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	DamageSphere->SetCollisionResponseToAllChannels(ECR_Overlap);
+	// BoxComponent: 수평 확장 (X=길이, Y=너비, Z=높이)
+	DamageBox = CreateDefaultSubobject<UBoxComponent>(TEXT("DamageBox"));
+	RootComponent = DamageBox;
+	DamageBox->SetBoxExtent(FVector(200.0f, 600.0f, 100.0f));
+	DamageBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	DamageBox->SetCollisionResponseToAllChannels(ECR_Overlap);
 
 	VisualMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VisualMesh"));
-	VisualMesh->SetupAttachment(DamageSphere);
+	VisualMesh->SetupAttachment(DamageBox);
 	VisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	VisualMesh->SetRelativeScale3D(FVector(4.0f, 4.0f, 0.5f));
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(
-		TEXT("/Engine/BasicShapes/Cylinder")
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(
+		TEXT("/Engine/BasicShapes/Cube")
 	);
-	if (CylinderMesh.Succeeded())
+	if (CubeMesh.Succeeded())
 	{
-		VisualMesh->SetStaticMesh(CylinderMesh.Object);
+		VisualMesh->SetStaticMesh(CubeMesh.Object);
 	}
+
+	// Cube 기본 100x100x100 → BoxExtent × 2 / 100 비율 (X=앞뒤 짧음, Y=좌우 김)
+	VisualMesh->SetRelativeScale3D(FVector(4.0f, 12.0f, 2.0f));
 }
 
 void AFireZone::BeginPlay()
@@ -55,7 +58,6 @@ void AFireZone::InitializeFireZone(float InDuration, float InTickInterval,
 	Duration = InDuration;
 	TickInterval = InTickInterval;
 	DamagePerTick = InDamagePerTick;
-	Radius = InRadius;
 	DamageInstigator = InInstigator;
 
 	// 시전자 사망 후에도 킬 크레딧 유지되도록 컨트롤러 캐시
@@ -64,44 +66,69 @@ void AFireZone::InitializeFireZone(float InDuration, float InTickInterval,
 		CachedInstigatorController = InstigatorPawn->GetController();
 	}
 
-	DamageSphere->SetSphereRadius(Radius);
+	// Radius → Box 치수 변환 (투척 방향 수직 수평 확장)
+	//   앞뒤(X) = Radius × 0.5  (짧음)
+	//   좌우(Y) = Radius × 1.5  (김 ⭐ Apex 화염 패턴)
+	//   위아래(Z) = Radius × 0.25
+	if (InRadius > 0.0f && DamageBox)
+	{
+		BoxExtent = FVector(
+			InRadius * 0.5f,
+			InRadius * 1.5f,
+			InRadius * 0.25f
+		);
+		DamageBox->SetBoxExtent(BoxExtent);
+
+		if (VisualMesh)
+		{
+			VisualMesh->SetRelativeScale3D(FVector(
+				BoxExtent.X * 2.0f / 100.0f,
+				BoxExtent.Y * 2.0f / 100.0f,
+				BoxExtent.Z * 2.0f / 100.0f
+			));
+		}
+	}
 
 	UE_LOG(LogTemp, Warning,
-	       TEXT("[FireZone] Initialized: Dur=%.1fs, Tick=%.2fs, Dmg=%.1f, Radius=%.1f, Instigator=%s"),
-	       Duration, TickInterval, DamagePerTick, Radius,
+	       TEXT("[FireZone] Init: Dur=%.1fs Tick=%.2fs Dmg=%.1f BoxExtent=%s Instigator=%s"),
+	       Duration, TickInterval, DamagePerTick, *BoxExtent.ToString(),
 	       InInstigator ? *InInstigator->GetName() : TEXT("NULL"));
 
 	if (GetWorld())
 	{
-		DrawDebugCircle(
-			GetWorld(), GetActorLocation(), Radius, 32,
-			FColor::Red, false, Duration, 0, 5.0f,
-			FVector(1, 0, 0), FVector(0, 1, 0), false
+		DrawDebugBox(
+			GetWorld(),
+			GetActorLocation(),
+			BoxExtent,
+			GetActorQuat(),
+			FColor::Red,
+			false,
+			Duration,
+			0,
+			5.0f
 		);
 	}
 
-	if (HasAuthority())
-	{
-		GetWorld()->GetTimerManager().SetTimer(
-			DamageTimerHandle, this,
-			&AFireZone::ApplyTickDamage,
-			TickInterval, true
-		);
+	GetWorld()->GetTimerManager().SetTimer(
+		DamageTimerHandle, this,
+		&AFireZone::ApplyTickDamage,
+		TickInterval, true
+	);
 
-		GetWorld()->GetTimerManager().SetTimer(
-			LifetimeTimerHandle, this,
-			&AFireZone::DestroyFireZone,
-			Duration, false
-		);
-	}
+	GetWorld()->GetTimerManager().SetTimer(
+		LifetimeTimerHandle, this,
+		&AFireZone::DestroyFireZone,
+		Duration, false
+	);
 }
 
 void AFireZone::ApplyTickDamage()
 {
 	if (!HasAuthority()) return;
+	if (!DamageBox) return;
 
 	TArray<AActor*> OverlappingActors;
-	DamageSphere->GetOverlappingActors(OverlappingActors, ACharacter::StaticClass());
+	DamageBox->GetOverlappingActors(OverlappingActors, ACharacter::StaticClass());
 
 	UE_LOG(LogTemp, Log,
 	       TEXT("[FireZone] Tick - Overlapping Characters: %d"),
