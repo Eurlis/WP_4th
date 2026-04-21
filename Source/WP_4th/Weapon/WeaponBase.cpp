@@ -534,6 +534,9 @@ void AWeaponBase::FireProjectile(const FVector& MuzzleLocation, const FVector& D
 		{
 			UE_LOG(LogTemp, Log, TEXT("[Fire] Got bullet: %s"), *Bullet->GetName());
 
+			// WeaponData 전달 (임팩트 이펙트 정보 포함)
+			Bullet->SetWeaponData(CurrentWeaponData);
+
 			Bullet->Activate(MuzzleLocation, Direction, BaseDamage, BulletSpeed, BulletGravityScale, OwningCharacter);
 
 			const FVector ActualVel = Direction.GetSafeNormal() * BulletSpeed;
