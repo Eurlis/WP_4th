@@ -84,8 +84,9 @@ Source/WP_4th/
 - [x] ADS 줌 시스템 (Longbow 우클릭, FOV 보간 + 이동속도 감소)
 - [x] Semi/Pump/Auto FireRate 쿨다운 정확히 적용 (CanFireNow + 클라/서버 이중 게이트)
 - [x] Burst 사격 로직 (Hemlok 3점사, Nemesis 4점사 — 서버 타이머 기반)
-- [ ] Arc Star 부착 로직 구현 (대기)
-- [ ] Thermite 지속 화염 로직 (대기)
+- [x] Arc Star 부착 로직 구현 (OnComponentHit + AttachToActor)
+- [x] Thermite 충돌 즉시 폭발 + AFireZone (bIsIncendiary 플래그 기반)
+- [x] 매직 스트링 제거 (WeaponID → bIsSticky/bIsIncendiary 플래그 분기)
 - [ ] 수류탄 던지기 테스트
 - [ ] 투사체 풀 PIE 테스트 (탄속/탄낙차 확인)
 - [ ] 멀티플레이 PIE 테스트

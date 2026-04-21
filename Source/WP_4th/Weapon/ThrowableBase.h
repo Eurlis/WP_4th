@@ -9,6 +9,7 @@
 
 class UProjectileMovementComponent;
 class UDataTable;
+class AFireZone;
 
 UCLASS(Abstract)
 class WP_4TH_API AThrowableBase : public AItemBase
@@ -62,9 +63,40 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastExplosionEffects(FVector ExplosionLocation);
 
+	// ===== Arc Star 부착 시스템 =====
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Throwable|Sticky")
+	bool bIsStuck = false;
+
+	UPROPERTY()
+	AActor* StuckTarget = nullptr;
+
+	// 시각적 회전 (표창 효과)
+	bool bIsVisualSpinning = false;
+
+	// 충돌 핸들러 (Arc Star 부착용)
+	UFUNCTION()
+	void OnProjectileHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
+	                     UPrimitiveComponent* OtherComp,
+	                     FVector NormalImpulse, const FHitResult& Hit);
+
+	// 충돌 즉시 폭발 핸들러 (Thermite, bIsIncendiary=true)
+	UFUNCTION()
+	void OnImpactExplode(UPrimitiveComponent* HitComp, AActor* OtherActor,
+	                     UPrimitiveComponent* OtherComp,
+	                     FVector NormalImpulse, const FHitResult& Hit);
+
+	// Arc Star 안정성용: ProjectileMovement 정지 이벤트 (OnComponentHit 보조)
+	UFUNCTION()
+	void OnProjectileStopped(const FHitResult& ImpactResult);
+
+	virtual void Tick(float DeltaTime) override;
+
 protected:
 	FTimerHandle FuseTimerHandle;
+	FTimerHandle MaxLifetimeHandle; // Arc Star 최후의 보루 (공중 정지 방지)
 
 	void Explode();
 	void ApplyThrowableData(const FWeaponData& Data);
+	void StickToTarget(const FHitResult& Hit);
+	void ForceExplode();
 };

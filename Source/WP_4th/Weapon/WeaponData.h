@@ -8,6 +8,7 @@
 #include "WeaponData.generated.h"
 
 class AProjectileBase;
+class AFireZone;
 class USkeletalMesh;
 class UStaticMesh;
 class UTexture2D;
@@ -147,6 +148,19 @@ struct FWeaponData : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable", meta=(EditCondition="bIsSticky"))
 	float StickyDamage = 10.f;
+
+	// ===== 소이탄 (Incendiary) - Thermite 등 =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary")
+	bool bIsIncendiary = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary", meta=(EditCondition="bIsIncendiary"))
+	float FireZoneDuration = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary", meta=(EditCondition="bIsIncendiary"))
+	float FireZoneTickInterval = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary", meta=(EditCondition="bIsIncendiary"))
+	TSubclassOf<AFireZone> FireZoneClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable")
 	UStaticMesh* ThrowableMesh = nullptr;
