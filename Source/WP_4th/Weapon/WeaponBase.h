@@ -189,6 +189,9 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastFireEffects(FVector MuzzleLocation, FVector TraceEnd);
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastSpawnMuzzleFlash(FVector MuzzleLoc, FRotator MuzzleRot);
+
 protected:
 	FTimerHandle FireTimerHandle;
 	FTimerHandle ReloadTimerHandle;

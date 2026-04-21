@@ -8,11 +8,14 @@
 #include "WeaponData.generated.h"
 
 class AProjectileBase;
+class AFireZone;
 class USkeletalMesh;
 class UStaticMesh;
 class UTexture2D;
 class UParticleSystem;
 class USoundBase;
+class UNiagaraSystem;
+class UMaterialInterface;
 
 UENUM(BlueprintType)
 enum class EWeaponCategory : uint8
@@ -148,6 +151,19 @@ struct FWeaponData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable", meta=(EditCondition="bIsSticky"))
 	float StickyDamage = 10.f;
 
+	// ===== 소이탄 (Incendiary) - Thermite 등 =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary")
+	bool bIsIncendiary = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary", meta=(EditCondition="bIsIncendiary"))
+	float FireZoneDuration = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary", meta=(EditCondition="bIsIncendiary"))
+	float FireZoneTickInterval = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary", meta=(EditCondition="bIsIncendiary"))
+	TSubclassOf<AFireZone> FireZoneClass;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable")
 	UStaticMesh* ThrowableMesh = nullptr;
 
@@ -159,7 +175,10 @@ struct FWeaponData : public FTableRowBase
 
 	// ===== 이펙트/사운드 =====
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
-	UParticleSystem* MuzzleFlashFX = nullptr;
+	TObjectPtr<UNiagaraSystem> MuzzleFlashFX;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
+	TObjectPtr<UNiagaraSystem> BulletTracerFX;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
 	USoundBase* FireSound = nullptr;
@@ -172,4 +191,28 @@ struct FWeaponData : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
 	USoundBase* ExplosionSound = nullptr;
+
+	// ===== 임팩트 이펙트 (벽/바닥) =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Impact")
+	TObjectPtr<UNiagaraSystem> BulletImpactFX;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Impact")
+	TObjectPtr<UMaterialInterface> BulletImpactDecal;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Impact")
+	TObjectPtr<USoundBase> BulletImpactSound;
+
+	// ===== 피격 이펙트 (캐릭터) =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Impact")
+	TObjectPtr<UNiagaraSystem> BloodImpactFX;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Impact")
+	TObjectPtr<USoundBase> BloodImpactSound;
+
+	// ===== 데칼 설정 =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Impact")
+	FVector BulletDecalSize = FVector(8.0f, 8.0f, 8.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Impact")
+	float BulletDecalLifeSpan = 15.0f;
 };

@@ -3,6 +3,7 @@
 #include "ProjectileBase.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/DecalComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Controller.h"
@@ -10,6 +11,10 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "NiagaraComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 AProjectileBase::AProjectileBase()
 {
@@ -28,6 +33,11 @@ AProjectileBase::AProjectileBase()
 	BulletMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BulletMesh"));
 	BulletMesh->SetupAttachment(CollisionComp);
 	BulletMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Tracer (Niagara Component) - 발사 시 활성화
+	TracerComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("TracerComponent"));
+	TracerComponent->SetupAttachment(CollisionComp);
+	TracerComponent->bAutoActivate = false;
 
 	// Projectile movement
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
@@ -92,6 +102,20 @@ void AProjectileBase::Activate(FVector SpawnLocation, FVector Direction, float I
 	SetActorEnableCollision(true);
 	SetActorTickEnabled(true);
 
+	// Tracer 활성화 (CachedWeaponData.BulletTracerFX 가 있으면)
+	if (TracerComponent)
+	{
+		if (CachedWeaponData.BulletTracerFX)
+		{
+			TracerComponent->SetAsset(CachedWeaponData.BulletTracerFX);
+			TracerComponent->Activate(true);
+		}
+		else
+		{
+			TracerComponent->Deactivate();
+		}
+	}
+
 	if (BulletMesh)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[Bullet] Mesh visible: %s, StaticMesh=%s"),
@@ -122,6 +146,11 @@ void AProjectileBase::Deactivate()
 		ProjectileMovement->Deactivate();
 	}
 
+	if (TracerComponent)
+	{
+		TracerComponent->Deactivate();
+	}
+
 	SetActorHiddenInGame(true);
 	SetActorEnableCollision(false);
 	SetActorTickEnabled(false);
@@ -142,6 +171,8 @@ void AProjectileBase::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UP
 	FName BoneName = Hit.BoneName;
 
 	ACharacter* HitChar = Cast<ACharacter>(OtherActor);
+	const bool bHitCharacter = (HitChar != nullptr);
+
 	if (HitChar)
 	{
 		if (BoneName == FName("head"))
@@ -158,11 +189,94 @@ void AProjectileBase::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UP
 		// TODO: ServerApplyDamage(FinalDamage, OwnerCharacter, Hit) — 캐릭터 베이스에서 구현 예정
 	}
 
+	// 임팩트 이펙트 브로드캐스트 (모든 클라이언트 동기화) - Deactivate 전에 호출
+	MulticastSpawnImpactEffects(Hit.ImpactPoint, Hit.ImpactNormal, OtherComp, bHitCharacter);
+
+#if !UE_BUILD_SHIPPING
 	DrawDebugSphere(GetWorld(), Hit.ImpactPoint, 10.f, 12, FColor::Red, false, 2.0f);
+#endif
 	UE_LOG(LogTemp, Log, TEXT("[Projectile] Hit: %s, Damage=%.1f, Bone=%s"),
 		OtherActor ? *OtherActor->GetName() : TEXT("None"), FinalDamage, *BoneName.ToString());
 
-	// TODO: 탄흔 이펙트 스폰
-
 	Deactivate();
+}
+
+void AProjectileBase::SetWeaponData(const FWeaponData& InWeaponData)
+{
+	CachedWeaponData = InWeaponData;
+}
+
+void AProjectileBase::MulticastSpawnImpactEffects_Implementation(FVector ImpactLocation, FVector ImpactNormal, UPrimitiveComponent* HitComp, bool bHitCharacter)
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	if (bHitCharacter)
+	{
+		// === 캐릭터 피격: 피 파티클 + 사운드 ===
+		if (CachedWeaponData.BloodImpactFX)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				World,
+				CachedWeaponData.BloodImpactFX,
+				ImpactLocation,
+				ImpactNormal.Rotation()
+			);
+		}
+
+		if (CachedWeaponData.BloodImpactSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(
+				World,
+				CachedWeaponData.BloodImpactSound,
+				ImpactLocation
+			);
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("[Impact] Blood effect at %s"), *ImpactLocation.ToString());
+	}
+	else
+	{
+		// === 벽/바닥: 파티클 + 데칼 + 사운드 ===
+		if (CachedWeaponData.BulletImpactFX)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				World,
+				CachedWeaponData.BulletImpactFX,
+				ImpactLocation,
+				ImpactNormal.Rotation()
+			);
+		}
+
+		// 데칼은 HitComp에 부착 (움직이는 오브젝트 대응)
+		if (CachedWeaponData.BulletImpactDecal && HitComp)
+		{
+			UDecalComponent* Decal = UGameplayStatics::SpawnDecalAttached(
+				CachedWeaponData.BulletImpactDecal,
+				CachedWeaponData.BulletDecalSize,
+				HitComp,
+				NAME_None,
+				ImpactLocation,
+				ImpactNormal.Rotation(),
+				EAttachLocation::KeepWorldPosition,
+				CachedWeaponData.BulletDecalLifeSpan
+			);
+
+			if (Decal)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[Impact] Decal spawned (life: %.1fs)"), CachedWeaponData.BulletDecalLifeSpan);
+			}
+		}
+
+		if (CachedWeaponData.BulletImpactSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(
+				World,
+				CachedWeaponData.BulletImpactSound,
+				ImpactLocation
+			);
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("[Impact] Wall effects at %s"), *ImpactLocation.ToString());
+	}
 }
