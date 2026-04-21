@@ -8,6 +8,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/PlayerController.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 #include "BulletPoolManager.h"
 #include "ProjectileBase.h"
 
@@ -482,6 +484,9 @@ void AWeaponBase::EndBurstFire()
 
 void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDirection)
 {
+	// Muzzle Flash + Fire Sound 브로드캐스트 (샷 당 1회, 산탄총 펠릿 수와 무관)
+	MulticastSpawnMuzzleFlash(MuzzleLocation, AimDirection.Rotation());
+
 	// DataTable 기반 산탄총 처리
 	if (CurrentWeaponData.bIsShotgun)
 	{
@@ -688,9 +693,38 @@ void AWeaponBase::OnUnequipped()
 void AWeaponBase::MulticastFireEffects_Implementation(FVector MuzzleLocation, FVector TraceEnd)
 {
 	// Debug line (visible for 1 second)
+#if !UE_BUILD_SHIPPING
 	DrawDebugLine(GetWorld(), MuzzleLocation, TraceEnd, FColor::Red, false, 1.0f, 0, 1.0f);
+#endif
+}
 
-	// TODO: Muzzle flash particle, impact particle, fire sound
+void AWeaponBase::MulticastSpawnMuzzleFlash_Implementation(FVector MuzzleLoc, FRotator MuzzleRot)
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// Muzzle Flash (Niagara)
+	if (CurrentWeaponData.MuzzleFlashFX)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			World,
+			CurrentWeaponData.MuzzleFlashFX,
+			MuzzleLoc,
+			MuzzleRot
+		);
+	}
+
+	// Fire Sound
+	if (CurrentWeaponData.FireSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			World,
+			CurrentWeaponData.FireSound,
+			MuzzleLoc
+		);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[MuzzleFlash] Spawned at %s"), *MuzzleLoc.ToString());
 }
 
 // ==================== Recoil ====================

@@ -13,6 +13,7 @@
 #include "TimerManager.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
+#include "NiagaraComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 AProjectileBase::AProjectileBase()
@@ -32,6 +33,11 @@ AProjectileBase::AProjectileBase()
 	BulletMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BulletMesh"));
 	BulletMesh->SetupAttachment(CollisionComp);
 	BulletMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Tracer (Niagara Component) - 발사 시 활성화
+	TracerComponent = CreateDefaultSubobject<UNiagaraComponent>(TEXT("TracerComponent"));
+	TracerComponent->SetupAttachment(CollisionComp);
+	TracerComponent->bAutoActivate = false;
 
 	// Projectile movement
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
@@ -96,6 +102,20 @@ void AProjectileBase::Activate(FVector SpawnLocation, FVector Direction, float I
 	SetActorEnableCollision(true);
 	SetActorTickEnabled(true);
 
+	// Tracer 활성화 (CachedWeaponData.BulletTracerFX 가 있으면)
+	if (TracerComponent)
+	{
+		if (CachedWeaponData.BulletTracerFX)
+		{
+			TracerComponent->SetAsset(CachedWeaponData.BulletTracerFX);
+			TracerComponent->Activate(true);
+		}
+		else
+		{
+			TracerComponent->Deactivate();
+		}
+	}
+
 	if (BulletMesh)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[Bullet] Mesh visible: %s, StaticMesh=%s"),
@@ -124,6 +144,11 @@ void AProjectileBase::Deactivate()
 	{
 		ProjectileMovement->StopMovementImmediately();
 		ProjectileMovement->Deactivate();
+	}
+
+	if (TracerComponent)
+	{
+		TracerComponent->Deactivate();
 	}
 
 	SetActorHiddenInGame(true);

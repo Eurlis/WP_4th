@@ -13,6 +13,7 @@ class UProjectileMovementComponent;
 class ACharacter;
 class AController;
 class UPrimitiveComponent;
+class UNiagaraComponent;
 
 UCLASS(Abstract)
 class WP_4TH_API AProjectileBase : public AActor
@@ -33,6 +34,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile|Components")
 	UProjectileMovementComponent* ProjectileMovement;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Projectile|Components")
+	UNiagaraComponent* TracerComponent;
 
 	// ========== Stats ==========
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Projectile|Stats")

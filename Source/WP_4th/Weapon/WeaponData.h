@@ -175,7 +175,10 @@ struct FWeaponData : public FTableRowBase
 
 	// ===== 이펙트/사운드 =====
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
-	UParticleSystem* MuzzleFlashFX = nullptr;
+	TObjectPtr<UNiagaraSystem> MuzzleFlashFX;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
+	TObjectPtr<UNiagaraSystem> BulletTracerFX;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
 	USoundBase* FireSound = nullptr;
