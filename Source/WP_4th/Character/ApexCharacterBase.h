@@ -4,6 +4,7 @@
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
 #include "Components/PakourComp/PakousComponent.h"
+#include "MotionWarping/Public/MotionWarping.h"
 #include "ApexCharacterBase.generated.h"
 
 class UHealthComponent;
@@ -207,4 +208,10 @@ private:
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_OnDeath();
+	
+	// MontionWarping
+public:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="Components")
+	UMotionWarpingComponent* MotionWarpingComp;
+	
 };

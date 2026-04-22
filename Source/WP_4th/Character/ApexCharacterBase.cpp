@@ -65,6 +65,8 @@ AApexCharacterBase::AApexCharacterBase()
 	SlideUngroundedTime = 0.f;
 	DefaultGroundFriction = MovementComponent->GroundFriction;
 	DefaultBrakingDecelerationWalking = MovementComponent->BrakingDecelerationWalking;
+
+	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 }
 
 void AApexCharacterBase::Tick(float DeltaTime)
@@ -185,7 +187,7 @@ void AApexCharacterBase::DoJumpStart()
 		Server_SlideJump();
 		return;
 	}
-	if (PakComp && PakComp->CanWallJump())
+	if (PakComp && PakComp->TryParkour())
 	{
 		return;
 	}

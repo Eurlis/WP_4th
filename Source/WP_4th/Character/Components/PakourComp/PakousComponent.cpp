@@ -3,6 +3,7 @@
 
 #include "PakousComponent.h"
 #include "DrawDebugHelpers.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -26,6 +27,9 @@ void UPakousComponent::BeginPlay()
 
 	OwnerCharacter = Cast<ACharacter>(GetOwner());	
 	WallTraceParams.AddIgnoredActor(OwnerCharacter);
+	
+	PlayerMesh = OwnerCharacter ? OwnerCharacter->GetMesh() : nullptr;
+	MotionWarpingComp = OwnerCharacter->FindComponentByClass<UMotionWarpingComponent>();
 }
 
 
@@ -34,11 +38,16 @@ void UPakousComponent::TickComponent(float DeltaTime, ELevelTick TickType,
                                      FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	bFoundTop = false;
 	DetectWall();
 	if (bwallFoward)
 	{
 		ScanWallTop();
-		if (bFoundTop)ScanWallEdge();
+		if (bFoundTop)
+		{
+			ScanWallEdge();
+			MeasureWall();
+		}
 		ScanLanding();
 	}
 	// ...
@@ -47,6 +56,57 @@ void UPakousComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 bool UPakousComponent::CanWallJump() const
 {
 	return bwallFoward && OwnerCharacter && !OwnerCharacter->GetCharacterMovement()->IsMovingOnGround();
+}
+
+void UPakousComponent::TryVault(EVaultType VaultType)
+{
+	if (!OwnerCharacter) return;
+	
+	//파쿠르 재진입 방지
+	bCanParkour = false;
+	
+	// 캡슐 끄기
+	OwnerCharacter->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	
+	OwnerCharacter->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+	if (MotionWarpingComp)
+	{
+		//시작
+		FRotator WarpRotation = WallNormalReversed.Rotation();
+		MotionWarpingComp->AddOrUpdateWarpTargetFromLocationAndRotation(FName("BoltStart"),ScanHitResult.ImpactPoint,WarpRotation);
+		
+		//착지
+		MotionWarpingComp->AddOrUpdateWarpTargetFromLocationAndRotation(FName("BoltEnd"), VaultLandingLocation, WarpRotation);
+	}
+	UAnimMontage* MontageToPlay = nullptr;
+	if (VaultType == EVaultType::OneHand)
+		MontageToPlay = OneHandVaultMontage;
+	else if(VaultType == EVaultType::TwoHand) MontageToPlay = TwoHandVaultMontage;
+	
+	if (!MontageToPlay) {OnVaultEnd(nullptr, true); return;}
+	
+	UAnimInstance* AnimInstance =OwnerCharacter->GetMesh()->GetAnimInstance();
+	if (AnimInstance)
+	{
+		OwnerCharacter->PlayAnimMontage(MontageToPlay);
+		AnimInstance->OnMontageEnded.AddDynamic(this, &UPakousComponent::OnVaultEnd);
+	}
+}
+
+void UPakousComponent::OnVaultEnd(UAnimMontage* Montage, bool bInterrupted)
+{
+	//콜백 해제
+	UAnimInstance* AnimInstance = OwnerCharacter->GetMesh()->GetAnimInstance();
+	if (AnimInstance)
+		AnimInstance->OnMontageEnded.RemoveDynamic(this, &UPakousComponent::OnVaultEnd);
+	
+	// 캡슐 충돌
+	OwnerCharacter->GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	
+	// 원래대로 복구
+	OwnerCharacter->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	
+	bCanParkour = true;
 }
 
 void UPakousComponent::DetectWall()
@@ -122,8 +182,51 @@ void UPakousComponent::ScanLanding()
 	if (bCanVault)
 	{
 		VaultLandingLocation = BoltLandingHit.ImpactPoint;
-		DrawDebugSphere(GetWorld(), VaultLandingLocation, 15.f,
+	DrawDebugSphere(GetWorld(), VaultLandingLocation, 15.f,
 	  8, FColor::Green, false, -1.f);
 	}
 }
+
+void UPakousComponent::MeasureWall()
+{
+	if (!wallHitResult.bBlockingHit || !ScanHitResult.bBlockingHit|| !PlayerMesh) return;
+	
+	WallHeight = ScanHitResult.ImpactPoint.Z - PlayerMesh->GetComponentLocation().Z;
+	
+	GEngine->AddOnScreenDebugMessage(-1, 0.f, FColor::Red, FString::Printf(TEXT("WallHeight: %.1f"), WallHeight));
+
+}
+
+bool UPakousComponent::TryParkour()
+{
+	if (!bCanParkour){return false;}
+	if (!bFoundTop) {return false;}
+	
+	if (!OwnerCharacter->GetCharacterMovement()->IsMovingOnGround()){return false;}
+	if (WallHeight > 300.f)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Red, TEXT("Height Over 300"));
+		return false;
+	}
+	if (WallHeight >= 130.f)
+	{
+		TryVault(EVaultType::TwoHand);
+		return true;
+	}
+	float speed = OwnerCharacter->GetVelocity().Size2D();
+	if (speed < 50.f)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 1.f, FColor::Blue, TEXT("Mantle"));
+		return true;
+	}
+	
+	if (WallHeight > 100.f)
+	TryVault(EVaultType::TwoHand);
+	else
+	{
+		TryVault(EVaultType::OneHand);
+	}
+		return true;
+}
+
 
