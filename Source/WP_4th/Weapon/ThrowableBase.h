@@ -63,6 +63,9 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastExplosionEffects(FVector ExplosionLocation);
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayThrowSound();
+
 	// ===== Arc Star 부착 시스템 =====
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Throwable|Sticky")
 	bool bIsStuck = false;

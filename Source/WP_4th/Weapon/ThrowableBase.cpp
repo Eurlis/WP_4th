@@ -219,6 +219,9 @@ void AThrowableBase::ServerThrow_Implementation(FVector ThrowDirection)
 	ProjectileMovement->Velocity = LaunchVelocity;
 	ProjectileMovement->Activate();
 
+	// === 던지기 사운드 (Multicast) ===
+	MulticastPlayThrowSound();
+
 	// === 퓨즈 시작 분기 ===
 	if (!CurrentWeaponData.bIsSticky && !CurrentWeaponData.bIsIncendiary)
 	{
@@ -474,6 +477,27 @@ void AThrowableBase::Explode()
 
 void AThrowableBase::MulticastExplosionEffects_Implementation(FVector ExplosionLocation)
 {
-	// TODO: Explosion particle, explosion sound
+	if (CurrentWeaponData.ExplosionSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			GetWorld(),
+			CurrentWeaponData.ExplosionSound,
+			ExplosionLocation
+		);
+	}
+
+	// TODO: Explosion particle
 	DrawDebugSphere(GetWorld(), ExplosionLocation, ExplosionRadius, 16, FColor::Yellow, false, 2.0f);
+}
+
+void AThrowableBase::MulticastPlayThrowSound_Implementation()
+{
+	if (CurrentWeaponData.ThrowSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			GetWorld(),
+			CurrentWeaponData.ThrowSound,
+			GetActorLocation()
+		);
+	}
 }

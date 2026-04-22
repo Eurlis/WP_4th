@@ -673,6 +673,8 @@ void AWeaponBase::OnEquipped()
 {
 	WeaponMesh1P->SetVisibility(true);
 	WeaponMesh3P->SetVisibility(true);
+
+	MulticastPlayEquipSound();
 }
 
 void AWeaponBase::OnUnequipped()
@@ -725,6 +727,19 @@ void AWeaponBase::MulticastSpawnMuzzleFlash_Implementation(FVector MuzzleLoc, FR
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("[MuzzleFlash] Spawned at %s"), *MuzzleLoc.ToString());
+}
+
+void AWeaponBase::MulticastPlayEquipSound_Implementation()
+{
+	if (CurrentWeaponData.EquipSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			GetWorld(),
+			CurrentWeaponData.EquipSound,
+			GetActorLocation(),
+			1.0f
+		);
+	}
 }
 
 // ==================== Recoil ====================

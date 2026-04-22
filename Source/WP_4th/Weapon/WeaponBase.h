@@ -192,6 +192,9 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastSpawnMuzzleFlash(FVector MuzzleLoc, FRotator MuzzleRot);
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayEquipSound();
+
 protected:
 	FTimerHandle FireTimerHandle;
 	FTimerHandle ReloadTimerHandle;

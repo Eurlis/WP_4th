@@ -191,11 +191,19 @@ struct FWeaponData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
 	TObjectPtr<UNiagaraSystem> BulletTracerFX;
 
+	// ===== 장착 사운드 (모든 무기 공통) =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Sound")
+	TObjectPtr<USoundBase> EquipSound;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
 	USoundBase* FireSound = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
 	USoundBase* ReloadSound = nullptr;
+
+	// ===== 수류탄 던지기 사운드 =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Sound")
+	TObjectPtr<USoundBase> ThrowSound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
 	UParticleSystem* ExplosionFX = nullptr;
