@@ -227,20 +227,7 @@ void AWeaponTestCharacter::StartFire()
 {
 	if (CurrentSlot == EEquippedSlot::Grenade)
 	{
-		ThrowGrenade();
-
-		// 수류탄 0개 되면 무기로 복귀, 아니면 수류탄 유지
-		if (GrenadeCount <= 0)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left, switching back to weapon"));
-
-			SwitchWeaponByID(!LastWeaponID.IsNone() ? LastWeaponID : ARWeaponID);
-			CurrentSlot = EEquippedSlot::Weapon;
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Slot] Grenade thrown, remaining: %d"), GrenadeCount);
-		}
+		StartThrowableAim();
 	}
 	else if (CurrentWeapon)
 	{
@@ -250,6 +237,23 @@ void AWeaponTestCharacter::StartFire()
 
 void AWeaponTestCharacter::StopFire()
 {
+	if (CurrentSlot == EEquippedSlot::Grenade && bIsAimingThrowable)
+	{
+		StopThrowableAim();
+		ThrowGrenade();
+
+		if (GrenadeCount <= 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left, switching back to weapon"));
+			SwitchWeaponByID(!LastWeaponID.IsNone() ? LastWeaponID : ARWeaponID);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Slot] Grenade thrown, remaining: %d"), GrenadeCount);
+		}
+		return;
+	}
+
 	if (CurrentSlot == EEquippedSlot::Weapon && CurrentWeapon)
 	{
 		CurrentWeapon->StopFire();
@@ -314,8 +318,6 @@ void AWeaponTestCharacter::SwitchToGrenade()
 
 	CurrentSlot = EEquippedSlot::Grenade;
 	UE_LOG(LogTemp, Warning, TEXT("[Slot] Switched to Grenade (Count: %d)"), GrenadeCount);
-
-	StartThrowableAim();
 }
 
 void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
