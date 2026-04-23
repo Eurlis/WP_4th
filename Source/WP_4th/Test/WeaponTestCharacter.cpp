@@ -132,23 +132,23 @@ void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	}
 	if (ReloadAction)
 	{
-		EnhancedInput->BindAction(ReloadAction, ETriggerEvent::Triggered, this, &AWeaponTestCharacter::Reload);
+		EnhancedInput->BindAction(ReloadAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::Reload);
 	}
 	if (SwitchARAction)
 	{
-		EnhancedInput->BindAction(SwitchARAction, ETriggerEvent::Triggered, this, &AWeaponTestCharacter::SwitchToAR);
+		EnhancedInput->BindAction(SwitchARAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::SwitchToAR);
 	}
 	if (SwitchPistolAction)
 	{
-		EnhancedInput->BindAction(SwitchPistolAction, ETriggerEvent::Triggered, this, &AWeaponTestCharacter::SwitchToPistol);
+		EnhancedInput->BindAction(SwitchPistolAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::SwitchToPistol);
 	}
 	if (SwitchShotgunAction)
 	{
-		EnhancedInput->BindAction(SwitchShotgunAction, ETriggerEvent::Triggered, this, &AWeaponTestCharacter::SwitchToShotgun);
+		EnhancedInput->BindAction(SwitchShotgunAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::SwitchToShotgun);
 	}
 	if (SwitchGrenadeAction)
 	{
-		EnhancedInput->BindAction(SwitchGrenadeAction, ETriggerEvent::Triggered, this, &AWeaponTestCharacter::SwitchToGrenade);
+		EnhancedInput->BindAction(SwitchGrenadeAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::SwitchToGrenade);
 	}
 	if (TurnAction)
 	{
@@ -303,6 +303,12 @@ void AWeaponTestCharacter::SwitchToShotgun()
 
 void AWeaponTestCharacter::SwitchToGrenade()
 {
+	// 이미 Grenade 슬롯이면 재진입 무시 (입력 중복 + 미래 확장 방어)
+	if (CurrentSlot == EEquippedSlot::Grenade)
+	{
+		return;
+	}
+
 	if (GrenadeCount <= 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left!"));
@@ -325,6 +331,13 @@ void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
 	if (WeaponID.IsNone() || !GenericWeaponClass)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[TestChar] SwitchWeaponByID: invalid ID or GenericWeaponClass not set"));
+		return;
+	}
+
+	// 중복 호출 방어: 이미 해당 무기를 장착 중이면 무시
+	// (수류탄 슬롯에서 복귀하는 경우는 숨김 해제 위해 재스폰 필요하므로 예외)
+	if (CurrentWeapon && CurrentSlot != EEquippedSlot::Grenade && CurrentWeapon->WeaponID == WeaponID)
+	{
 		return;
 	}
 
