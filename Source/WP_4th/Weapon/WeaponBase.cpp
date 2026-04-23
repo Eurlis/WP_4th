@@ -731,23 +731,28 @@ void AWeaponBase::MulticastSpawnMuzzleFlash_Implementation(FVector MuzzleLoc, FR
 
 void AWeaponBase::MulticastPlayEquipSound_Implementation()
 {
-	if (!CurrentWeaponData.EquipSound) return;
+	if (!CurrentWeaponData.EquipSound || !OwningCharacter) return;
 
-	if (OwningCharacter && OwningCharacter->IsLocallyControlled())
+	if (OwningCharacter->IsLocallyControlled())
 	{
 		UGameplayStatics::PlaySound2D(
-			GetWorld(),
+			OwningCharacter,
 			CurrentWeaponData.EquipSound,
 			1.0f
 		);
 	}
 	else
 	{
-		UGameplayStatics::PlaySoundAtLocation(
-			GetWorld(),
+		UGameplayStatics::SpawnSoundAttached(
 			CurrentWeaponData.EquipSound,
-			GetActorLocation(),
-			1.0f
+			OwningCharacter->GetRootComponent(),
+			NAME_None,
+			FVector::ZeroVector,
+			EAttachLocation::KeepRelativeOffset,
+			false,
+			1.0f, 1.0f, 0.0f,
+			nullptr, nullptr,
+			true
 		);
 	}
 }
