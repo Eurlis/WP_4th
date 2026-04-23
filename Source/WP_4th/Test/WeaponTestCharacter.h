@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
+#include "Kismet/GameplayStatics.h"
 #include "WeaponTestCharacter.generated.h"
 
 class UCameraComponent;
@@ -13,6 +14,11 @@ class UInputMappingContext;
 class UInputAction;
 class AWeaponBase;
 class AThrowableBase;
+class USplineComponent;
+class USplineMeshComponent;
+class UDecalComponent;
+class UStaticMesh;
+class UMaterialInterface;
 
 UENUM()
 enum class EEquippedSlot : uint8
@@ -127,6 +133,34 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Movement")
 	float ADSWalkSpeedMultiplier = 0.6f;
 
+	// ========== WP4-37/38: 수류탄 조준 시스템 ==========
+	UPROPERTY(VisibleAnywhere, Category = "Throwable|Aim")
+	TObjectPtr<USplineComponent> TrajectorySpline;
+
+	UPROPERTY(VisibleAnywhere, Category = "Throwable|Aim")
+	TObjectPtr<UDecalComponent> TargetMarkerDecal;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Throwable|Aim")
+	TObjectPtr<UStaticMesh> TrajectorySplineMesh;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Throwable|Aim")
+	TObjectPtr<UMaterialInterface> TrajectoryMeshMaterial;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Throwable|Aim")
+	TObjectPtr<UMaterialInterface> TargetMarkerMaterial;
+
+	UPROPERTY()
+	TArray<TObjectPtr<USplineMeshComponent>> TrajectoryMeshes;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Throwable|Aim")
+	float MaxTrajectorySimTime = 3.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Throwable|Aim")
+	float TrajectoryProjectileRadius = 5.0f;
+
+	bool bIsAimingThrowable = false;
+	FPredictProjectilePathResult CachedTrajectoryResult;
+
 	// ========== Weapon System Stubs ==========
 	UFUNCTION()
 	void ServerApplyDamage(float Damage, ACharacter* DamageInstigator, FHitResult HitResult);
@@ -154,6 +188,12 @@ protected:
 	void LookUp(const FInputActionValue& Value);
 	void OnAimStarted();
 	void OnAimStopped();
+
+	// === WP4-37/38 ===
+	void StartThrowableAim();
+	void StopThrowableAim();
+	void UpdateThrowableAimPreview();
+	bool IsCurrentWeaponThrowable() const;
 
 	float SavedDefaultWalkSpeed = 0.f;
 };

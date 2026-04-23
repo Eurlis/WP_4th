@@ -3,11 +3,17 @@
 #include "WeaponTestCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/DecalComponent.h"
+#include "Components/SplineComponent.h"
+#include "Components/SplineMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Engine/DataTable.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "WeaponBase.h"
+#include "WeaponData.h"
 #include "ThrowableBase.h"
+#include "TrajectoryHelper.h"
 
 AWeaponTestCharacter::AWeaponTestCharacter()
 {
@@ -25,6 +31,18 @@ AWeaponTestCharacter::AWeaponTestCharacter()
 	Mesh1P->SetOnlyOwnerSee(true);
 	Mesh1P->bCastDynamicShadow = false;
 	Mesh1P->CastShadow = false;
+
+	// === WP4-37: 수류탄 궤적 프리뷰 ===
+	TrajectorySpline = CreateDefaultSubobject<USplineComponent>(TEXT("TrajectorySpline"));
+	TrajectorySpline->SetupAttachment(GetCapsuleComponent());
+	TrajectorySpline->SetMobility(EComponentMobility::Movable);
+	TrajectorySpline->ClearSplinePoints(false);
+
+	// === WP4-38: 착탄 마커 ===
+	TargetMarkerDecal = CreateDefaultSubobject<UDecalComponent>(TEXT("TargetMarkerDecal"));
+	TargetMarkerDecal->SetupAttachment(GetCapsuleComponent());
+	TargetMarkerDecal->SetVisibility(false);
+	TargetMarkerDecal->DecalSize = FVector(50.f, 50.f, 50.f);
 
 	CurrentWeapon = nullptr;
 }
@@ -59,6 +77,12 @@ void AWeaponTestCharacter::BeginPlay()
 	{
 		SavedDefaultWalkSpeed = MoveComp->MaxWalkSpeed;
 	}
+
+	// 마커 머터리얼 적용 (BP에서 TargetMarkerMaterial 세팅 시)
+	if (TargetMarkerDecal && TargetMarkerMaterial)
+	{
+		TargetMarkerDecal->SetDecalMaterial(TargetMarkerMaterial);
+	}
 }
 
 void AWeaponTestCharacter::Tick(float DeltaTime)
@@ -74,6 +98,11 @@ void AWeaponTestCharacter::Tick(float DeltaTime)
 	const float CurrentFOV = FirstPersonCamera->FieldOfView;
 	const float NewFOV = FMath::FInterpTo(CurrentFOV, TargetFOV, DeltaTime, ADSInterpSpeed);
 	FirstPersonCamera->SetFieldOfView(NewFOV);
+
+	if (bIsAimingThrowable && IsCurrentWeaponThrowable())
+	{
+		UpdateThrowableAimPreview();
+	}
 }
 
 void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -285,6 +314,8 @@ void AWeaponTestCharacter::SwitchToGrenade()
 
 	CurrentSlot = EEquippedSlot::Grenade;
 	UE_LOG(LogTemp, Warning, TEXT("[Slot] Switched to Grenade (Count: %d)"), GrenadeCount);
+
+	StartThrowableAim();
 }
 
 void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
@@ -299,6 +330,7 @@ void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
 	if (CurrentSlot == EEquippedSlot::Grenade)
 	{
 		CurrentSlot = EEquippedSlot::Weapon;
+		StopThrowableAim();
 	}
 
 	// 기존 무기 제거 (숨김 무기 포함)
@@ -404,5 +436,103 @@ void AWeaponTestCharacter::ThrowGrenade()
 		GrenadeCount--;
 
 		UE_LOG(LogTemp, Warning, TEXT("[Grenade] Thrown! Remaining: %d"), GrenadeCount);
+	}
+}
+
+// ==================== WP4-37/38: 수류탄 조준 시스템 ====================
+
+bool AWeaponTestCharacter::IsCurrentWeaponThrowable() const
+{
+	return CurrentSlot == EEquippedSlot::Grenade && GrenadeCount > 0;
+}
+
+void AWeaponTestCharacter::StartThrowableAim()
+{
+	bIsAimingThrowable = true;
+}
+
+void AWeaponTestCharacter::StopThrowableAim()
+{
+	bIsAimingThrowable = false;
+	TrajectoryHelper::ClearTrajectory(TrajectorySpline, TrajectoryMeshes);
+	if (TargetMarkerDecal)
+	{
+		TargetMarkerDecal->SetVisibility(false);
+	}
+}
+
+void AWeaponTestCharacter::UpdateThrowableAimPreview()
+{
+	if (!GenericThrowableClass || !GetController() || !GetWorld())
+	{
+		return;
+	}
+
+	// GenericThrowableClass CDO 의 DataTable 에서 투척 물리 파라미터 조회
+	// (실제 ServerThrow 와 동일한 ThrowForce / ThrowableGravityScale 사용)
+	AThrowableBase* ThrowableCDO = GenericThrowableClass->GetDefaultObject<AThrowableBase>();
+	if (!ThrowableCDO || !ThrowableCDO->WeaponDataTable)
+	{
+		return;
+	}
+
+	FWeaponData* Data = ThrowableCDO->WeaponDataTable->FindRow<FWeaponData>(
+		GrenadeWeaponID, TEXT("ThrowableAimPreview"));
+	if (!Data)
+	{
+		return;
+	}
+
+	// ThrowGrenade 와 동일한 SpawnLocation / Direction 계산
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	GetController()->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+	const FVector StartLocation = CameraLocation + CameraRotation.Vector() * 100.f;
+
+	FVector ThrowDirection = CameraRotation.Vector();
+	ThrowDirection.Z += 0.2f;
+	ThrowDirection.Normalize();
+
+	const FVector LaunchVelocity = ThrowDirection * Data->ThrowForce;
+
+	FPredictProjectilePathParams PredictParams(
+		TrajectoryProjectileRadius,
+		StartLocation,
+		LaunchVelocity,
+		MaxTrajectorySimTime);
+
+	PredictParams.bTraceWithCollision = true;
+	PredictParams.bTraceComplex = false;
+	PredictParams.ActorsToIgnore.Add(this);
+	PredictParams.SimFrequency = 15.f;
+	PredictParams.OverrideGravityZ = -980.f * Data->ThrowableGravityScale;
+	PredictParams.TraceChannel = ECC_Visibility;
+
+	FPredictProjectilePathResult Result;
+	UGameplayStatics::PredictProjectilePath(this, PredictParams, Result);
+
+	CachedTrajectoryResult = Result;
+
+	TrajectoryHelper::UpdateSplineFromPath(
+		TrajectorySpline,
+		TrajectoryMeshes,
+		Result.PathData,
+		TrajectorySplineMesh,
+		TrajectoryMeshMaterial,
+		this);
+
+	if (TargetMarkerDecal)
+	{
+		const bool bBlockingHit = Result.HitResult.bBlockingHit;
+		const FVector LandingPoint = bBlockingHit
+			? Result.HitResult.ImpactPoint
+			: Result.LastTraceDestination.Location;
+		const FVector LandingNormal = bBlockingHit
+			? Result.HitResult.ImpactNormal
+			: FVector::UpVector;
+
+		TargetMarkerDecal->SetWorldLocationAndRotation(LandingPoint, LandingNormal.Rotation());
+		TargetMarkerDecal->SetVisibility(bBlockingHit);
 	}
 }
