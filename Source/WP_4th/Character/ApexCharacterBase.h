@@ -196,11 +196,13 @@ private:
 	void TickSlide(float DeltaTime);
 
 	FVector SlideDirection;
+	float SlideSpeed;           // slope 재투영 오차 방지용 별도 속도 트래킹
 	float SlideEnterEndTime;
 	float SlideExitEndTime;
 	float SlideUngroundedTime;
 	float DefaultGroundFriction;
 	float DefaultBrakingDecelerationWalking;
+	float DefaultMaxWalkSpeedCrouched;
 
 	// ─── Death ────────────────────────────────────────────────────
 	UFUNCTION()

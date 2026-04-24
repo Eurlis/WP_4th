@@ -248,8 +248,17 @@ void UPakousComponent::TickWallClimb(float DeltaTime)
 		return;
 	}
 
-	// 위로 이동
-	MoveComp->Velocity = FVector(0.f, 0.f, ClimbSpeed);
+	// 스페이스 홀드 중 눈 트레이스가 벽 위를 벗어나면 자동 올라서기
+	if (bClimbInputHeld && !bWallTall)
+	{
+		if (TryClimbUp())
+			return;
+	}
+
+	// 시간 경과에 따라 ClimbSpeed → MinClimbSpeed 선형 감속
+	const float t = FMath::Clamp(ClimbTimer / MaxClimbTime, 0.f, 1.f);
+	const float CurrentSpeed = FMath::Lerp(ClimbSpeed, MinClimbSpeed, t);
+	MoveComp->Velocity = FVector(0.f, 0.f, CurrentSpeed);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -353,6 +362,9 @@ bool UPakousComponent::TryClimbUp()
 {
 	if (!OwnerChar || !MoveComp || !CapsuleComp) return false;
 
+	// WallSlide(타임아웃 후 탈진 상태)에서는 올라서기 불가
+	if (ParkourState == EParkourState::WallSlide) return false;
+
 	const float Half     = CapsuleComp->GetScaledCapsuleHalfHeight();
 	const float Radius   = CapsuleComp->GetScaledCapsuleRadius();
 	const FVector Origin = OwnerChar->GetActorLocation();
@@ -360,31 +372,40 @@ bool UPakousComponent::TryClimbUp()
 	FCollisionQueryParams Params;
 	Params.AddIgnoredActor(OwnerChar);
 
-	// ① 벽 표면 히트 지점에서 수직으로 올려 벽 에지(top) Z 탐색
+	// ① 벽 에지(top) 탐색 — End를 발 아래까지 내려서 캐릭터가 벽 꼭대기 근처일 때도 포착
 	const FVector TopSearchStart = WallHitLocation + FVector(0.f, 0.f, 500.f);
-	const FVector TopSearchEnd   = WallHitLocation;
+	const FVector TopSearchEnd   = FVector(WallHitLocation.X, WallHitLocation.Y, Origin.Z - Half);
 	FHitResult EdgeHit;
-	bool bEdgeFound = GetWorld()->LineTraceSingleByChannel(EdgeHit, TopSearchStart, TopSearchEnd, ECC_Visibility, Params);
-	if (!bEdgeFound) return false;
+	if (!GetWorld()->LineTraceSingleByChannel(EdgeHit, TopSearchStart, TopSearchEnd, ECC_Visibility, Params))
+		return false;
 
-	// ② 에지 위에서 벽 안쪽(반대 노말) 방향으로 70cm 이동 후 아래로 낙하 탐색
-	const FVector OverEdge  = EdgeHit.ImpactPoint + FVector(0.f, 0.f, 10.f) + (-WallNormal) * 70.f;
-	const FVector DropEnd   = OverEdge - FVector(0.f, 0.f, 300.f);
+	// ② 에지 위에서 캡슐 지름 + 여유만큼 벽 너머로 이동 후 낙하 탐색
+	const float OverOffset = Radius * 2.f + 30.f;
+	const FVector OverEdge = EdgeHit.ImpactPoint + FVector(0.f, 0.f, 10.f) + (-WallNormal) * OverOffset;
+	const FVector DropEnd  = OverEdge - FVector(0.f, 0.f, 500.f);
 	FHitResult GroundHit;
-	bool bGroundFound = GetWorld()->LineTraceSingleByChannel(GroundHit, OverEdge, DropEnd, ECC_Visibility, Params);
-	if (!bGroundFound) return false;
+	if (!GetWorld()->LineTraceSingleByChannel(GroundHit, OverEdge, DropEnd, ECC_Visibility, Params))
+		return false;
 
-	// ③ 착지 지점 = 바닥 위 캡슐 높이만큼 위
-	ClimbTargetPos = GroundHit.ImpactPoint + FVector(0.f, 0.f, Half + 2.f);
+	// ③ 착지 후보 위치
+	const FVector CandidatePos = GroundHit.ImpactPoint + FVector(0.f, 0.f, Half + 2.f);
+
+	// ④ 캡슐 공간 검증 — 착지 지점에 실제로 들어갈 수 있는지 확인
+	const FCollisionShape CapsuleShape = FCollisionShape::MakeCapsule(Radius - 1.f, Half - 1.f);
+	if (GetWorld()->OverlapBlockingTestByChannel(CandidatePos, FQuat::Identity, ECC_Pawn, CapsuleShape, Params))
+		return false;
+
+	ClimbTargetPos = CandidatePos;
 
 #if WITH_EDITOR
-	DrawDebugSphere(GetWorld(), ClimbTargetPos, 15.f, 8, FColor::Cyan, false, 3.f);
+	DrawDebugLine(GetWorld(), TopSearchStart, TopSearchEnd, FColor::Orange, false, 3.f);
+	DrawDebugSphere(GetWorld(), EdgeHit.ImpactPoint, 8.f, 6, FColor::Yellow, false, 3.f);
 	DrawDebugLine(GetWorld(), OverEdge, DropEnd, FColor::Magenta, false, 3.f);
+	DrawDebugSphere(GetWorld(), ClimbTargetPos, 15.f, 8, FColor::Cyan, false, 3.f);
 #endif
 
 	UE_LOG(LogTemp, Log, TEXT("[Parkour] TryClimbUp target=%s"), *ClimbTargetPos.ToString());
 
-	// 몽타주가 있으면 병행 재생 (위치는 코드로 보장)
 	if (AnimInstance && ClimbUpMontage)
 		AnimInstance->Montage_Play(ClimbUpMontage);
 

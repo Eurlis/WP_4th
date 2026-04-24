@@ -53,10 +53,13 @@ public:
 	float MaxAttachTime = 0.25f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Parkour|Climb")
-	float ClimbSpeed = 600.f;
+	float ClimbSpeed = 450.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Parkour|Climb")
-	float MaxClimbTime = 1.8f;
+	float MinClimbSpeed = 80.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Parkour|Climb")
+	float MaxClimbTime = 1.3f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Parkour|Slide")
 	float SlideSpeed = 120.f;
