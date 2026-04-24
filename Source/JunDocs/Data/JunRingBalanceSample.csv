@@ -1,0 +1,6 @@
+Name,PhaseIndex,TargetRadius,WaitTime,ShrinkTime,DamageInterval,DamagePerTick
+Phase01,0,8000,30,20,1.0,2
+Phase02,1,5000,25,18,1.0,4
+Phase03,2,2500,20,15,0.75,6
+Phase04,3,1000,15,12,0.5,8
+Phase05,4,400,10,8,0.35,12
