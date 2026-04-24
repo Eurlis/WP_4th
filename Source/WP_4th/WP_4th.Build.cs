@@ -20,6 +20,7 @@ public class WP_4th : ModuleRules
 			"UMG",
 			"Slate",
 			"MotionWarping"
+			
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "AnimGraphRuntime" });
