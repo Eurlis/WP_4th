@@ -20,7 +20,8 @@ public class WP_4th : ModuleRules
 			"UMG",
 			"Slate",
 			"MotionWarping",
-			"Niagara"
+			"Niagara",
+			"NiagaraCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "AnimGraphRuntime" });
