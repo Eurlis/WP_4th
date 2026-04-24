@@ -32,6 +32,7 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	// --- Public API (ApexCharacterBase 호환) ---
+	bool TryHandleJump();
 	bool TryParkour();
 	bool TryClimbUp();
 	void ExitClimb(bool bJumpOff);

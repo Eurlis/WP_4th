@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "InputActionValue.h"
+#include "Character/ApexCharacterBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "WeaponTestCharacter.generated.h"
 
@@ -20,12 +21,7 @@ class UDecalComponent;
 class UStaticMesh;
 class UMaterialInterface;
 
-UENUM()
-enum class EEquippedSlot : uint8
-{
-	Weapon,
-	Grenade
-};
+
 
 UCLASS()
 class WP_4TH_API AWeaponTestCharacter : public ACharacter

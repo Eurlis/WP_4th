@@ -21,7 +21,12 @@ enum class ESlideAnimationPhase : uint8
 	Loop,
 	Exit
 };
-
+UENUM()
+enum class EEquippedSlot : uint8
+{
+	Weapon,
+	Grenade
+};
 UCLASS(abstract)
 class WP_4TH_API AApexCharacterBase : public ACharacter
 {
@@ -48,6 +53,8 @@ public:
 	AWeaponBase* CurrentWeapon;
 	UPROPERTY(EditAnywhere, Category= "Weapon")
 	TSubclassOf<AWeaponBase> GenericWeaponClass;
+	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+	EEquippedSlot CurrentSlot = EEquippedSlot::Weapon;
 	// ─── Movement State ───────────────────────────────────────────
 	UPROPERTY(ReplicatedUsing = OnRep_IsSprinting, BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting;
@@ -118,6 +125,37 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* SlideAction;
+	
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* FireAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* ReloadAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* SwitchARAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* SwitchPistolAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* SwitchShotgunAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* SwitchGrenadeAction;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+	UInputAction* AimAction;
+
+	// ─── ADS ──────────────────────────────────────────────────────
+	UPROPERTY(EditAnywhere, Category = "ADS")
+	float DefaultFOV = 70.f;
+
+	UPROPERTY(EditAnywhere, Category = "ADS")
+	float ADSInterpSpeed = 12.f;
+
+	UPROPERTY(EditAnywhere, Category = "ADS")
+	float ADSWalkSpeedMultiplier = 0.6f;
 
 	// ─── Getters ──────────────────────────────────────────────────
 	USkeletalMeshComponent* GetFirstPersonMesh() const { return FirstPersonMesh; }
@@ -148,6 +186,13 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	virtual void DoJumpEnd();
+
+	// ─── Weapon Actions ───────────────────────────────────────────
+	void StartFire();
+	void StopFire();
+	void OnAimStarted();
+	void OnAimStopped();
+	void Reload();
 
 	// ─── Sprint ───────────────────────────────────────────────────
 	void StartSprint();
@@ -210,7 +255,10 @@ private:
 	float DefaultGroundFriction;
 	float DefaultBrakingDecelerationWalking;
 	float DefaultMaxWalkSpeedCrouched;
+	float SavedDefaultWalkSpeed = 0.f;
 
+	
+	
 	// ─── Death ────────────────────────────────────────────────────
 	UFUNCTION()
 	void HandleDeath();

@@ -110,6 +110,14 @@ void AApexCharacterBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	TickSlide(DeltaTime);
+
+	if (IsPlayerControlled() && FirstPersonCameraComponent)
+	{
+		const bool bAiming = CurrentWeapon && CurrentWeapon->bIsAiming && CurrentSlot == EEquippedSlot::Weapon;
+		const float TargetFOV = DefaultFOV * (bAiming ? CurrentWeapon->GetADSFOVMultiplier() : 1.f);
+		FirstPersonCameraComponent->SetFieldOfView(
+			FMath::FInterpTo(FirstPersonCameraComponent->FieldOfView, TargetFOV, DeltaTime, ADSInterpSpeed));
+	}
 }
 
 void AApexCharacterBase::BeginPlay()
@@ -172,6 +180,35 @@ void AApexCharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 			EIC->BindAction(SlideAction, ETriggerEvent::Started, this, &AApexCharacterBase::StartSlide);
 			EIC->BindAction(SlideAction, ETriggerEvent::Completed, this, &AApexCharacterBase::StopSlide);
 		}
+		if (FireAction)
+		{
+			EIC->BindAction(FireAction, ETriggerEvent::Started, this, &AApexCharacterBase::StartFire);
+			EIC->BindAction(FireAction, ETriggerEvent::Completed, this, &AApexCharacterBase::StopFire);
+		}
+		if (ReloadAction)
+		{
+			EIC->BindAction(ReloadAction, ETriggerEvent::Started, this, &AApexCharacterBase::Reload);
+		}
+		if (AimAction)
+		{
+			EIC->BindAction(AimAction, ETriggerEvent::Started, this, &AApexCharacterBase::OnAimStarted);
+		}
+		/*if (SwitchARAction)
+		{
+			EIC->BindAction(SwitchARAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToAR);
+		}
+		if (SwitchPistolAction)
+		{
+			EIC->BindAction(SwitchPistolAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToPistol);
+		}
+		if (SwitchShotgunAction)
+		{
+			EIC->BindAction(SwitchShotgunAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToShotgun);
+		}
+		if (SwitchGrenadeAction)
+		{
+			EIC->BindAction(SwitchGrenadeAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToGrenade);
+		}*/
 	}
 	else
 	{
@@ -219,32 +256,8 @@ void AApexCharacterBase::DoMove(float Right, float Forward)
 
 void AApexCharacterBase::DoJumpStart()
 {
-	if (bIsSliding)
-	{
-		Server_SlideJump();
-		return;
-	}
-
-	// WallAttach: 새 점프 입력 = 벽 반사 도약 (Jump Held 와 구별)
-	if (PakComp && PakComp->GetParkourState() == EParkourState::WallAttach)
-	{
-		PakComp->TriggerWallJump();
-		return;
-	}
-
-	if (PakComp) PakComp->bClimbInputHeld = true;
-
-	// WallClimb / WallSlide: 꼭대기 올라서기 or 벽 점프 탈출
-	if (PakComp && PakComp->GetIsClimbing())
-	{
-		if (!PakComp->TryClimbUp())
-			PakComp->ExitClimb(true);
-		return;
-	}
-
-	if (PakComp && PakComp->TryParkour())
-		return;
-
+	if (bIsSliding) { Server_SlideJump(); return; }
+	if (PakComp && PakComp->TryHandleJump()) return;
 	Jump();
 }
 
@@ -569,6 +582,60 @@ void AApexCharacterBase::OnRep_SlideAnimationPhase()
 {
 }
 
+void AApexCharacterBase::OnAimStarted()
+{
+	if (CurrentSlot != EEquippedSlot::Weapon || !CurrentWeapon) return;
+
+	if (CurrentWeapon->bIsAiming)
+		OnAimStopped();
+	else
+	{
+		CurrentWeapon->StartAiming();
+		if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+		{
+			if (SavedDefaultWalkSpeed <= 0.f)
+				SavedDefaultWalkSpeed = MoveComp->MaxWalkSpeed;
+			MoveComp->MaxWalkSpeed = SavedDefaultWalkSpeed * ADSWalkSpeedMultiplier;
+		}
+	}
+}
+
+void AApexCharacterBase::OnAimStopped()
+{
+	if (CurrentWeapon)
+		CurrentWeapon->StopAiming();
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		if (SavedDefaultWalkSpeed > 0.f)
+			MoveComp->MaxWalkSpeed = SavedDefaultWalkSpeed;
+	}
+}
+
+void AApexCharacterBase::StartFire()
+{
+	if (CurrentSlot == EEquippedSlot::Weapon && CurrentWeapon)
+	{
+		CurrentWeapon->StartFire();
+	}
+}
+
+void AApexCharacterBase::StopFire()
+{
+	if (CurrentSlot == EEquippedSlot::Weapon && CurrentWeapon)
+	{
+		CurrentWeapon->StopFire();
+	}
+}
+
+void AApexCharacterBase::Reload()
+{
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->StartReload();
+	}
+}
+
 void AApexCharacterBase::HandleDeath()
 {
 	if (HasAuthority())
@@ -576,6 +643,7 @@ void AApexCharacterBase::HandleDeath()
 		Multicast_OnDeath();
 	}
 }
+
 
 void AApexCharacterBase::Multicast_OnDeath_Implementation()
 {

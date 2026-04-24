@@ -339,6 +339,25 @@ void UPakousComponent::TriggerWallJump()
 // ─────────────────────────────────────────────────────────────
 //  TryParkour — 지상에서 앞에 벽 감지 시 호출 (공중→벽은 Tick에서 자동)
 // ─────────────────────────────────────────────────────────────
+bool UPakousComponent::TryHandleJump()
+{
+	if (ParkourState == EParkourState::WallAttach)
+	{
+		TriggerWallJump();
+		return true;
+	}
+
+	bClimbInputHeld = true;
+
+	if (GetIsClimbing())
+	{
+		if (!TryClimbUp()) ExitClimb(true);
+		return true;
+	}
+
+	return TryParkour();
+}
+
 bool UPakousComponent::TryParkour()
 {
 	if (!bWallForward) return false;
