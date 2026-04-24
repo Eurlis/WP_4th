@@ -65,6 +65,8 @@ AApexCharacterBase::AApexCharacterBase()
 	SlideUngroundedTime = 0.f;
 	DefaultGroundFriction = MovementComponent->GroundFriction;
 	DefaultBrakingDecelerationWalking = MovementComponent->BrakingDecelerationWalking;
+
+	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 }
 
 void AApexCharacterBase::Tick(float DeltaTime)
@@ -185,16 +187,34 @@ void AApexCharacterBase::DoJumpStart()
 		Server_SlideJump();
 		return;
 	}
-	if (PakComp && PakComp->CanWallJump())
+
+	// WallAttach: 새 점프 입력 = 벽 반사 도약 (Jump Held 와 구별)
+	if (PakComp && PakComp->GetParkourState() == EParkourState::WallAttach)
 	{
+		PakComp->TriggerWallJump();
 		return;
 	}
+
+	if (PakComp) PakComp->bClimbInputHeld = true;
+
+	// WallClimb / WallSlide: 꼭대기 올라서기 or 벽 점프 탈출
+	if (PakComp && PakComp->GetIsClimbing())
+	{
+		if (!PakComp->TryClimbUp())
+			PakComp->ExitClimb(true);
+		return;
+	}
+
+	if (PakComp && PakComp->TryParkour())
+		return;
+
 	Jump();
 }
 
 void AApexCharacterBase::DoJumpEnd()
 {
 	StopJumping();
+	if (PakComp) PakComp->bClimbInputHeld = false;
 }
 
 float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
