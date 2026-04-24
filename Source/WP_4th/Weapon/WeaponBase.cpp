@@ -493,7 +493,7 @@ void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDi
 		const float SpreadRad = FMath::DegreesToRadians(CurrentWeaponData.SpreadAngle);
 		for (int32 i = 0; i < CurrentWeaponData.PelletCount; i++)
 		{
-			FVector SpreadDir = FMath::VRandCone(AimDirection, SpreadRad);
+			FVector SpreadDir = CalculateSpreadDirection(i, CurrentWeaponData.PelletCount, AimDirection, SpreadRad);
 			FireProjectile(MuzzleLocation, SpreadDir);
 		}
 		MulticastFireEffects(MuzzleLocation, MuzzleLocation + AimDirection * WeaponRange);
@@ -566,6 +566,70 @@ void AWeaponBase::FireProjectile(const FVector& MuzzleLocation, const FVector& D
 	}
 
 	DrawDebugLine(GetWorld(), MuzzleLocation, TraceEnd, FColor::Red, false, 1.0f, 0, 1.0f);
+}
+
+FVector AWeaponBase::CalculateSpreadDirection(int32 Index, int32 Total, const FVector& AimDir, float SpreadRad) const
+{
+	// 카메라 기준 Right/Up 벡터 계산
+	FVector Right = FVector::CrossProduct(AimDir, FVector::UpVector).GetSafeNormal();
+	FVector Up = FVector::CrossProduct(Right, AimDir).GetSafeNormal();
+
+	// Up 벡터가 0이면 (위/아래 조준 시) Forward 기준으로 다시 계산
+	if (Up.IsNearlyZero())
+	{
+		Right = FVector::CrossProduct(AimDir, FVector::ForwardVector).GetSafeNormal();
+		Up = FVector::CrossProduct(Right, AimDir).GetSafeNormal();
+	}
+
+	const float SpreadDist = FMath::Tan(SpreadRad);
+
+	switch (CurrentWeaponData.SpreadPattern)
+	{
+		case EShotgunSpreadPattern::Circular:
+		{
+			// Index 0은 정중앙 (조준점), 나머지는 원형 균등 분포
+			if (Index == 0 && Total > 1)
+			{
+				return AimDir;
+			}
+
+			const int32 OuterCount = Total - 1;
+			const float Angle = (2.f * PI * (Index - 1)) / OuterCount;
+			FVector Offset = (Right * FMath::Cos(Angle) + Up * FMath::Sin(Angle)) * SpreadDist;
+			return (AimDir + Offset).GetSafeNormal();
+		}
+
+		case EShotgunSpreadPattern::Horizontal:
+		{
+			// 수평 일렬 (-1.0 ~ +1.0) + 소량 수직 랜덤
+			const float T = (Total > 1) ? ((float)Index / (Total - 1) * 2.f - 1.f) : 0.f;
+			FVector Offset = Right * SpreadDist * T;
+			Offset += Up * SpreadDist * 0.1f * FMath::FRandRange(-1.f, 1.f);
+			return (AimDir + Offset).GetSafeNormal();
+		}
+
+		case EShotgunSpreadPattern::Vertical:
+		{
+			// 수직 일렬 + 소량 수평 랜덤
+			const float T = (Total > 1) ? ((float)Index / (Total - 1) * 2.f - 1.f) : 0.f;
+			FVector Offset = Up * SpreadDist * T;
+			Offset += Right * SpreadDist * 0.1f * FMath::FRandRange(-1.f, 1.f);
+			return (AimDir + Offset).GetSafeNormal();
+		}
+
+		case EShotgunSpreadPattern::Cross:
+		{
+			// 절반은 수평축, 나머지 절반은 수직축
+			const int32 Half = Total / 2;
+			const float T = (Half > 1) ? ((float)(Index % Half) / (Half - 1) * 2.f - 1.f) : 0.f;
+			FVector Axis = (Index < Half) ? Right : Up;
+			return (AimDir + Axis * SpreadDist * T).GetSafeNormal();
+		}
+
+		case EShotgunSpreadPattern::Random:
+		default:
+			return FMath::VRandCone(AimDir, SpreadRad);
+	}
 }
 
 void AWeaponBase::PerformLineTrace(const FVector& Start, const FVector& Direction, FHitResult& OutHit) const

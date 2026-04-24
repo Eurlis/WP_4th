@@ -217,6 +217,9 @@ protected:
 	void ApplyWeaponData(const FWeaponData& Data);
 	void FireProjectile(const FVector& MuzzleLocation, const FVector& Direction);
 
+	// WP4-43: 샷건 스프레드 패턴별 방향 계산
+	FVector CalculateSpreadDirection(int32 Index, int32 Total, const FVector& AimDir, float SpreadRad) const;
+
 	UFUNCTION()
 	void OnRep_CurrentAmmo();
 };
