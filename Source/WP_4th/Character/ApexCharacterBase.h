@@ -11,6 +11,7 @@ class UHealthComponent;
 class UInputAction;
 class USkeletalMeshComponent;
 class UCameraComponent;
+class AWeaponBase;
 
 UENUM(BlueprintType)
 enum class ESlideAnimationPhase : uint8
@@ -35,12 +36,18 @@ class WP_4TH_API AApexCharacterBase : public ACharacter
 
 public:
 	AApexCharacterBase();
-
+	
+	void EquipWeapon(FName WeaponID);
+	
 	// ─── Components ───────────────────────────────────────────────
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UHealthComponent* HealthComponent;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category= "Components")
 	UPakousComponent* PakComp;
+	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+	AWeaponBase* CurrentWeapon;
+	UPROPERTY(EditAnywhere, Category= "Weapon")
+	TSubclassOf<AWeaponBase> GenericWeaponClass;
 	// ─── Movement State ───────────────────────────────────────────
 	UPROPERTY(ReplicatedUsing = OnRep_IsSprinting, BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting;
@@ -196,11 +203,13 @@ private:
 	void TickSlide(float DeltaTime);
 
 	FVector SlideDirection;
+	float SlideSpeed;           // slope 재투영 오차 방지용 별도 속도 트래킹
 	float SlideEnterEndTime;
 	float SlideExitEndTime;
 	float SlideUngroundedTime;
 	float DefaultGroundFriction;
 	float DefaultBrakingDecelerationWalking;
+	float DefaultMaxWalkSpeedCrouched;
 
 	// ─── Death ────────────────────────────────────────────────────
 	UFUNCTION()

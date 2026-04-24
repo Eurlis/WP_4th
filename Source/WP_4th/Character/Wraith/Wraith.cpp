@@ -21,7 +21,7 @@ AWraith::AWraith()
 void AWraith::BeginPlay()
 {
 	Super::BeginPlay();
-	
+	EquipWeapon("R301");
 }
 
 // Called every frame

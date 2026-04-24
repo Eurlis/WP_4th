@@ -8,6 +8,7 @@
 #include "EnhancedInputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputActionValue.h"
+#include "WeaponBase.h"
 #include "Net/UnrealNetwork.h"
 #include "WP_4th.h"
 
@@ -48,25 +49,61 @@ AApexCharacterBase::AApexCharacterBase()
 	SprintSpeed = 700.f;
 	WalkSpeed = 400.f;
 	CrouchSpeed = 200.f;
-	SlideMaxSpeed = 1400.f;
+	SlideMaxSpeed = 900.f;
 	SlideMinSpeed = 250.f;
-	SlopeAccelMultiplier = 2400.f;
+	SlopeAccelMultiplier = 0.f;
 	SlideJumpSpeedMultiplier = 1.25f;
 	SlideEnterDuration = 0.16f;
 	SlideExitDuration = 0.20f;
-	SlideFlatDeceleration = 950.f;
+	SlideFlatDeceleration = 200.f;    // 낮춰서 17° 이상 경사면 가속 체감
 	SlideUphillDeceleration = 1650.f;
 	SlideDownhillAcceleration = 900.f;
 	SlideUngroundedGracePeriod = 0.15f;
 
 	SlideDirection = FVector::ForwardVector;
+	SlideSpeed = 0.f;
 	SlideEnterEndTime = 0.f;
 	SlideExitEndTime = 0.f;
 	SlideUngroundedTime = 0.f;
 	DefaultGroundFriction = MovementComponent->GroundFriction;
 	DefaultBrakingDecelerationWalking = MovementComponent->BrakingDecelerationWalking;
+	DefaultMaxWalkSpeedCrouched = MovementComponent->MaxWalkSpeedCrouched;
 
 	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+}
+
+void AApexCharacterBase::EquipWeapon(FName WeaponID)
+{
+	
+	if (WeaponID.IsNone() || !GenericWeaponClass) return;
+
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->OnUnequipped();
+		CurrentWeapon->Destroy();
+		CurrentWeapon = nullptr;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(
+		GenericWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+	if (!CurrentWeapon) return;
+
+	CurrentWeapon->InitFromDataTable(WeaponID);
+
+	// FirstPersonMesh의 weapon 소켓에 부착 (소켓명은 팀원 메시에 맞게 수정)
+	CurrentWeapon->AttachToComponent(
+		FirstPersonMesh,
+		FAttachmentTransformRules::SnapToTargetIncludingScale,
+		FName("weapon_r"));
+
+	CurrentWeapon->OwningCharacter = this;
+	CurrentWeapon->OnEquipped();
+
 }
 
 void AApexCharacterBase::Tick(float DeltaTime)
@@ -363,6 +400,7 @@ void AApexCharacterBase::BeginSlide()
 	}
 
 	SlideUngroundedTime = 0.f;
+	SlideSpeed = HorizontalVelocity.Size();
 	Crouch();
 	bIsSliding = true;
 	ApplySlideMovementSettings();
@@ -407,6 +445,7 @@ void AApexCharacterBase::ApplySlideMovementSettings()
 	MovementComponent->GroundFriction = 0.0f;
 	MovementComponent->BrakingDecelerationWalking = 0.0f;
 	MovementComponent->MaxWalkSpeed = SlideMaxSpeed;
+	MovementComponent->MaxWalkSpeedCrouched = SlideMaxSpeed; // Crouch 상태에서 실제 적용되는 속도 상한
 }
 
 void AApexCharacterBase::RestoreDefaultMovementSettings()
@@ -415,6 +454,7 @@ void AApexCharacterBase::RestoreDefaultMovementSettings()
 	MovementComponent->GroundFriction = DefaultGroundFriction;
 	MovementComponent->BrakingDecelerationWalking = DefaultBrakingDecelerationWalking;
 	MovementComponent->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	MovementComponent->MaxWalkSpeedCrouched = DefaultMaxWalkSpeedCrouched;
 }
 
 void AApexCharacterBase::TickSlide(float DeltaTime)
@@ -480,23 +520,26 @@ void AApexCharacterBase::TickSlide(float DeltaTime)
 	const float SlopeAmount = DownhillVector.Size();
 	const float DownhillAlignment = FVector::DotProduct(MoveDirection, DownhillDirection);
 	const float UphillAlignment = FMath::Max(-DownhillAlignment, 0.f);
-	const float CurrentSpeed = PlaneVelocity.Size();
-
+	// SlideSpeed로 가속/감속 계산 (Velocity에서 읽으면 slope 재투영마다 속도 손실)
 	float SpeedDelta = -SlideFlatDeceleration * DeltaTime;
 	SpeedDelta -= UphillAlignment * SlopeAmount * SlideUphillDeceleration * DeltaTime;
 	SpeedDelta += FMath::Max(DownhillAlignment, 0.f) * SlopeAmount * SlideDownhillAcceleration * DeltaTime;
 	SpeedDelta += FMath::Max(DownhillAlignment, 0.f) * SlopeAmount * SlopeAccelMultiplier * DeltaTime;
 
-	const float NewSpeed = FMath::Clamp(CurrentSpeed + SpeedDelta, 0.f, SlideMaxSpeed);
-	if (NewSpeed <= KINDA_SMALL_NUMBER)
+	SlideSpeed = FMath::Clamp(SlideSpeed + SpeedDelta, 0.f, SlideMaxSpeed);
+	if (SlideSpeed <= KINDA_SMALL_NUMBER)
 	{
 		EndSlide(true);
 		return;
 	}
 
-	MovementComponent->Velocity = MoveDirection * NewSpeed;
+	// 수평 방향으로만 velocity 설정 — movement component가 slope following 처리
+	FVector HorizDir = FVector(MoveDirection.X, MoveDirection.Y, 0.f).GetSafeNormal();
+	if (HorizDir.IsNearlyZero())
+		HorizDir = FVector(SlideDirection.X, SlideDirection.Y, 0.f).GetSafeNormal();
+	MovementComponent->Velocity = HorizDir * SlideSpeed;
 
-	if (NewSpeed < SlideMinSpeed && DownhillAlignment <= 0.05f)
+	if (SlideSpeed < SlideMinSpeed && DownhillAlignment <= 0.05f)
 	{
 		EndSlide(true);
 	}
