@@ -24,7 +24,14 @@ AProjectileBase::AProjectileBase()
 	// Collision (root)
 	CollisionComp = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComp"));
 	CollisionComp->InitSphereRadius(2.0f);
-	CollisionComp->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+
+	// 펠릿끼리 Block되어 총구에 뭉쳐 정지하던 버그(WP4-42) 방지:
+	// Projectile Custom Channel(ECC_GameTraceChannel1) 사용 — 다른 Projectile은 Ignore.
+	CollisionComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	CollisionComp->SetCollisionObjectType(ECC_GameTraceChannel1);
+	CollisionComp->SetCollisionResponseToAllChannels(ECR_Block);
+	CollisionComp->SetCollisionResponseToChannel(ECC_GameTraceChannel1, ECR_Ignore);
+
 	CollisionComp->SetNotifyRigidBodyCollision(true);
 	CollisionComp->OnComponentHit.AddDynamic(this, &AProjectileBase::OnHit);
 	RootComponent = CollisionComp;
@@ -126,13 +133,6 @@ void AProjectileBase::Activate(FVector SpawnLocation, FVector Direction, float I
 	GetWorldTimerManager().ClearTimer(LifeSpanTimerHandle);
 	GetWorldTimerManager().SetTimer(LifeSpanTimerHandle, this, &AProjectileBase::Deactivate, LifeSpan, false);
 
-	// 디버그: 총알 시작 위치 (노란 구, 3초) + 초기 방향 라인
-	if (UWorld* World = GetWorld())
-	{
-		DrawDebugSphere(World, SpawnLocation, 15.0f, 12, FColor::Yellow, false, 3.0f);
-		DrawDebugLine(World, SpawnLocation, SpawnLocation + NormalizedDir * 500.f, FColor::Yellow, false, 1.0f, 0, 1.0f);
-	}
-
 	UE_LOG(LogTemp, Log, TEXT("[Projectile] Activated: Speed=%.1f, Direction=%s"), BulletSpeed, *NormalizedDir.ToString());
 }
 
@@ -192,9 +192,6 @@ void AProjectileBase::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UP
 	// 임팩트 이펙트 브로드캐스트 (모든 클라이언트 동기화) - Deactivate 전에 호출
 	MulticastSpawnImpactEffects(Hit.ImpactPoint, Hit.ImpactNormal, OtherComp, bHitCharacter);
 
-#if !UE_BUILD_SHIPPING
-	DrawDebugSphere(GetWorld(), Hit.ImpactPoint, 10.f, 12, FColor::Red, false, 2.0f);
-#endif
 	UE_LOG(LogTemp, Log, TEXT("[Projectile] Hit: %s, Damage=%.1f, Bone=%s"),
 		OtherActor ? *OtherActor->GetName() : TEXT("None"), FinalDamage, *BoneName.ToString());
 

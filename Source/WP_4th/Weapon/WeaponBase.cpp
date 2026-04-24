@@ -510,14 +510,6 @@ void AWeaponBase::FireProjectile(const FVector& MuzzleLocation, const FVector& D
 	UE_LOG(LogTemp, Warning, TEXT("[Fire] Muzzle: %s, AimDir: %s, Speed=%.1f"),
 		*MuzzleLocation.ToString(), *Direction.ToString(), BulletSpeed);
 
-	// 디버그: 발사 방향 라인 + 총구 위치 구체 (1초간)
-	if (UWorld* World = GetWorld())
-	{
-		const FVector EndLoc = MuzzleLocation + Direction * 5000.0f;
-		DrawDebugLine(World, MuzzleLocation, EndLoc, FColor::Red, false, 1.0f, 0, 2.0f);
-		DrawDebugSphere(World, MuzzleLocation, 20.0f, 12, FColor::Green, false, 1.0f);
-	}
-
 	if (!BulletPool)
 	{
 		BulletPool = Cast<ABulletPoolManager>(
