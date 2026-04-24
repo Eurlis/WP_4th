@@ -19,8 +19,8 @@ public class WP_4th : ModuleRules
 			"GameplayStateTreeModule",
 			"UMG",
 			"Slate",
-			"Niagara",
-			"NiagaraCore"
+			"MotionWarping",
+			"Niagara"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "AnimGraphRuntime" });
