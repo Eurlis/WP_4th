@@ -8,6 +8,7 @@
 #include "EnhancedInputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputActionValue.h"
+#include "WeaponBase.h"
 #include "Net/UnrealNetwork.h"
 #include "WP_4th.h"
 
@@ -69,6 +70,40 @@ AApexCharacterBase::AApexCharacterBase()
 	DefaultMaxWalkSpeedCrouched = MovementComponent->MaxWalkSpeedCrouched;
 
 	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+}
+
+void AApexCharacterBase::EquipWeapon(FName WeaponID)
+{
+	
+	if (WeaponID.IsNone() || !GenericWeaponClass) return;
+
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->OnUnequipped();
+		CurrentWeapon->Destroy();
+		CurrentWeapon = nullptr;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(
+		GenericWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+	if (!CurrentWeapon) return;
+
+	CurrentWeapon->InitFromDataTable(WeaponID);
+
+	// FirstPersonMesh의 weapon 소켓에 부착 (소켓명은 팀원 메시에 맞게 수정)
+	CurrentWeapon->AttachToComponent(
+		FirstPersonMesh,
+		FAttachmentTransformRules::SnapToTargetIncludingScale,
+		FName("weapon_r"));
+
+	CurrentWeapon->OwningCharacter = this;
+	CurrentWeapon->OnEquipped();
+
 }
 
 void AApexCharacterBase::Tick(float DeltaTime)
