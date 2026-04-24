@@ -24,6 +24,16 @@ enum class EWeaponCategory : uint8
 	Throwable
 };
 
+UENUM(BlueprintType)
+enum class EShotgunSpreadPattern : uint8
+{
+	Random      UMETA(DisplayName = "Random (VRandCone)"),
+	Circular    UMETA(DisplayName = "Circular (Peacekeeper, EVA-8)"),
+	Horizontal  UMETA(DisplayName = "Horizontal (Mastiff)"),
+	Vertical    UMETA(DisplayName = "Vertical (확장용)"),
+	Cross       UMETA(DisplayName = "Cross (확장용)")
+};
+
 USTRUCT(BlueprintType)
 struct FWeaponData : public FTableRowBase
 {
@@ -131,6 +141,9 @@ struct FWeaponData : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Shotgun", meta=(EditCondition="bIsShotgun"))
 	float SpreadAngle = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Shotgun", meta=(EditCondition="bIsShotgun"))
+	EShotgunSpreadPattern SpreadPattern = EShotgunSpreadPattern::Random;
 
 	// ===== 투척 전용 =====
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable")
