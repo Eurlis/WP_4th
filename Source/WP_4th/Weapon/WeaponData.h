@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+#include "NiagaraSystem.h"
 #include "WeaponTypes.h"
 #include "WeaponData.generated.h"
 
@@ -219,10 +220,18 @@ struct FWeaponData : public FTableRowBase
 	TObjectPtr<USoundBase> ThrowSound;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
-	UParticleSystem* ExplosionFX = nullptr;
+	TObjectPtr<UNiagaraSystem> ExplosionFX;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="FX")
 	USoundBase* ExplosionSound = nullptr;
+
+	// ===== Thermite 소이 화염 (지속 이펙트) =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary")
+	TObjectPtr<UNiagaraSystem> FireFX;
+
+	// ===== ArcStar 전기/감전 이펙트 =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Electric")
+	TObjectPtr<UNiagaraSystem> ShockFX;
 
 	// ===== 임팩트 이펙트 (벽/바닥) =====
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Firearm|Impact")

@@ -11,6 +11,8 @@
 #include "Engine/DataTable.h"
 #include "DrawDebugHelpers.h"
 #include "GameFramework/Character.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 
 AThrowableBase::AThrowableBase()
 {
@@ -477,17 +479,61 @@ void AThrowableBase::Explode()
 
 void AThrowableBase::MulticastExplosionEffects_Implementation(FVector ExplosionLocation)
 {
+	UWorld* World = GetWorld();
+
+	// 1. ExplosionFX (Niagara) — 모든 수류탄 공통 폭발 이펙트
+	if (CurrentWeaponData.ExplosionFX)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			World,
+			CurrentWeaponData.ExplosionFX,
+			ExplosionLocation,
+			FRotator::ZeroRotator,
+			FVector(1.0f),
+			true,   // bAutoDestroy
+			true    // bAutoActivate
+		);
+	}
+
+	// 2. ExplosionSound
 	if (CurrentWeaponData.ExplosionSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(
-			GetWorld(),
+			World,
 			CurrentWeaponData.ExplosionSound,
 			ExplosionLocation
 		);
 	}
 
-	// TODO: Explosion particle
-	DrawDebugSphere(GetWorld(), ExplosionLocation, ExplosionRadius, 16, FColor::Yellow, false, 2.0f);
+	// 3. FireFX — Thermite 소이 화염 (bIsIncendiary=true 전용)
+	if (CurrentWeaponData.bIsIncendiary && CurrentWeaponData.FireFX)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			World,
+			CurrentWeaponData.FireFX,
+			ExplosionLocation,
+			FRotator::ZeroRotator,
+			FVector(1.0f),
+			true,
+			true
+		);
+	}
+
+	// 4. ShockFX — ArcStar 감전 이펙트 (bIsSticky=true 전용)
+	if (CurrentWeaponData.bIsSticky && CurrentWeaponData.ShockFX)
+	{
+		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			World,
+			CurrentWeaponData.ShockFX,
+			ExplosionLocation,
+			FRotator::ZeroRotator,
+			FVector(1.0f),
+			true,
+			true
+		);
+	}
+
+	DrawDebugSphere(World, ExplosionLocation, ExplosionRadius, 16, FColor::Yellow, false, 2.0f);
 }
 
 void AThrowableBase::MulticastPlayThrowSound_Implementation()
