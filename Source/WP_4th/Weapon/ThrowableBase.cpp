@@ -13,6 +13,7 @@
 #include "GameFramework/Character.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
+#include "NiagaraComponent.h"
 
 AThrowableBase::AThrowableBase()
 {
@@ -375,6 +376,21 @@ void AThrowableBase::StickToTarget(const FHitResult& Hit)
 		       *StuckTarget->GetName());
 	}
 
+	// 부착 1초 뒤 ShockFX/사운드 멀티캐스트 (구체가 보이고 들리는 시간 확보)
+	const float StickEffectDelay = 1.0f;
+	const FVector StickLoc = GetActorLocation();
+	TWeakObjectPtr<AActor> StuckActorWeak(StuckTarget);
+	GetWorldTimerManager().SetTimer(
+		StickEffectTimerHandle,
+		FTimerDelegate::CreateLambda([this, StickLoc, StuckActorWeak]()
+		{
+			if (!IsValid(this)) return;
+			MulticastStickEffects(StickLoc, StuckActorWeak.Get());
+		}),
+		StickEffectDelay,
+		false
+	);
+
 	// 부착 이후 퓨즈 시작 (ServerThrow에서 시작 안 함)
 	GetWorldTimerManager().SetTimer(FuseTimerHandle, this, &AThrowableBase::Explode, FuseTime, false);
 
@@ -519,21 +535,72 @@ void AThrowableBase::MulticastExplosionEffects_Implementation(FVector ExplosionL
 		);
 	}
 
-	// 4. ShockFX — ArcStar 감전 이펙트 (bIsSticky=true 전용)
-	if (CurrentWeaponData.bIsSticky && CurrentWeaponData.ShockFX)
+	// 4. ShockFX 정리 — 부착 시점에 스폰된 감전 이펙트 종료
+	if (ActiveShockFXComponent)
 	{
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-			World,
-			CurrentWeaponData.ShockFX,
-			ExplosionLocation,
-			FRotator::ZeroRotator,
-			FVector(1.0f),
-			true,
-			true
-		);
+		ActiveShockFXComponent->Deactivate();
+		ActiveShockFXComponent = nullptr;
 	}
 
 	DrawDebugSphere(World, ExplosionLocation, ExplosionRadius, 16, FColor::Yellow, false, 2.0f);
+}
+
+void AThrowableBase::MulticastStickEffects_Implementation(FVector StickLocation, AActor* StuckActor)
+{
+	if (!CurrentWeaponData.bIsSticky) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// ShockFX (전기 구체)
+	if (CurrentWeaponData.ShockFX)
+	{
+		if (StuckActor && StuckActor->GetRootComponent())
+		{
+			// 캐릭터/액터에 부착 → 따라가게
+			ActiveShockFXComponent = UNiagaraFunctionLibrary::SpawnSystemAttached(
+				CurrentWeaponData.ShockFX,
+				StuckActor->GetRootComponent(),
+				NAME_None,
+				FVector::ZeroVector,
+				FRotator::ZeroRotator,
+				EAttachLocation::KeepRelativeOffset,
+				false,  // bAutoDestroy = false (Explode에서 수동 정리)
+				true    // bAutoActivate
+			);
+		}
+		else
+		{
+			// 벽/바닥 → 위치 고정
+			ActiveShockFXComponent = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				World,
+				CurrentWeaponData.ShockFX,
+				StickLocation,
+				FRotator::ZeroRotator,
+				FVector(1.0f),
+				false,  // bAutoDestroy = false
+				true
+			);
+		}
+	}
+
+	// 부착 사운드 (별도 필드 없음 → 기존 ExplosionSound 재사용 안 함, 무음)
+	// 추후 WeaponData에 StickSound 신설 시 여기서 PlaySoundAtLocation 추가
+}
+
+void AThrowableBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	GetWorldTimerManager().ClearTimer(FuseTimerHandle);
+	GetWorldTimerManager().ClearTimer(MaxLifetimeHandle);
+	GetWorldTimerManager().ClearTimer(StickEffectTimerHandle);
+
+	if (ActiveShockFXComponent)
+	{
+		ActiveShockFXComponent->DestroyComponent();
+		ActiveShockFXComponent = nullptr;
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void AThrowableBase::MulticastPlayThrowSound_Implementation()

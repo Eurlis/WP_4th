@@ -10,6 +10,7 @@
 class UProjectileMovementComponent;
 class UDataTable;
 class AFireZone;
+class UNiagaraComponent;
 
 UCLASS(Abstract)
 class WP_4TH_API AThrowableBase : public AItemBase
@@ -66,6 +67,10 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayThrowSound();
 
+	// ArcStar 부착 이펙트 (부착 후 1초 뒤 호출)
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastStickEffects(FVector StickLocation, AActor* StuckActor);
+
 	// ===== Arc Star 부착 시스템 =====
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Throwable|Sticky")
 	bool bIsStuck = false;
@@ -94,9 +99,16 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 protected:
 	FTimerHandle FuseTimerHandle;
 	FTimerHandle MaxLifetimeHandle; // Arc Star 최후의 보루 (공중 정지 방지)
+	FTimerHandle StickEffectTimerHandle; // Arc Star 부착 후 ShockFX 딜레이용
+
+	// 부착 시 스폰된 ShockFX 컴포넌트 (폭발 시 정리)
+	UPROPERTY()
+	TObjectPtr<UNiagaraComponent> ActiveShockFXComponent;
 
 	void Explode();
 	void ApplyThrowableData(const FWeaponData& Data);
