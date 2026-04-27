@@ -190,7 +190,7 @@ public:
 	void MulticastFireEffects(FVector MuzzleLocation, FVector TraceEnd);
 
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastSpawnMuzzleFlash(FVector MuzzleLoc, FRotator MuzzleRot);
+	void MulticastSpawnMuzzleFlash();
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayEquipSound();

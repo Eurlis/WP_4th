@@ -485,7 +485,7 @@ void AWeaponBase::EndBurstFire()
 void AWeaponBase::ProcessHit(const FVector& MuzzleLocation, const FVector& AimDirection)
 {
 	// Muzzle Flash + Fire Sound 브로드캐스트 (샷 당 1회, 산탄총 펠릿 수와 무관)
-	MulticastSpawnMuzzleFlash(MuzzleLocation, AimDirection.Rotation());
+	MulticastSpawnMuzzleFlash();
 
 	// DataTable 기반 산탄총 처리
 	if (CurrentWeaponData.bIsShotgun)
@@ -564,8 +564,6 @@ void AWeaponBase::FireProjectile(const FVector& MuzzleLocation, const FVector& D
 		TraceEnd = HitResult.ImpactPoint;
 		ApplyDamage(HitResult, BaseDamage);
 	}
-
-	DrawDebugLine(GetWorld(), MuzzleLocation, TraceEnd, FColor::Red, false, 1.0f, 0, 1.0f);
 }
 
 FVector AWeaponBase::CalculateSpreadDirection(int32 Index, int32 Total, const FVector& AimDir, float SpreadRad) const
@@ -750,39 +748,58 @@ void AWeaponBase::OnUnequipped()
 
 void AWeaponBase::MulticastFireEffects_Implementation(FVector MuzzleLocation, FVector TraceEnd)
 {
-	// Debug line (visible for 1 second)
-#if !UE_BUILD_SHIPPING
-	DrawDebugLine(GetWorld(), MuzzleLocation, TraceEnd, FColor::Red, false, 1.0f, 0, 1.0f);
-#endif
 }
 
-void AWeaponBase::MulticastSpawnMuzzleFlash_Implementation(FVector MuzzleLoc, FRotator MuzzleRot)
+void AWeaponBase::MulticastSpawnMuzzleFlash_Implementation()
 {
 	UWorld* World = GetWorld();
 	if (!World) return;
 
-	// Muzzle Flash (Niagara)
+	// Muzzle Flash (Niagara) — 무기 메시 소켓에 부착하여 이동/회전 추종
 	if (CurrentWeaponData.MuzzleFlashFX)
 	{
-		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-			World,
-			CurrentWeaponData.MuzzleFlashFX,
-			MuzzleLoc,
-			MuzzleRot
-		);
+		const FName SocketName = TEXT("MuzzleSocket");
+
+		// 1P 메시 (소유자 시점)
+		if (WeaponMesh1P && WeaponMesh1P->DoesSocketExist(SocketName))
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAttached(
+				CurrentWeaponData.MuzzleFlashFX,
+				WeaponMesh1P,
+				SocketName,
+				FVector::ZeroVector,
+				FRotator(90.0f, 0.0f, 0.0f),  // Pitch=90 보정 (NS 분사축 정렬)
+				EAttachLocation::SnapToTarget,
+				true
+			);
+		}
+
+		// 3P 메시 (타 플레이어 시점)
+		if (WeaponMesh3P && WeaponMesh3P->DoesSocketExist(SocketName))
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAttached(
+				CurrentWeaponData.MuzzleFlashFX,
+				WeaponMesh3P,
+				SocketName,
+				FVector::ZeroVector,
+				FRotator(90.0f, 0.0f, 0.0f),  // Pitch=90 보정 (NS 분사축 정렬)
+				EAttachLocation::SnapToTarget,
+				true
+			);
+		}
 	}
 
-	// Fire Sound
+	// Fire Sound (위치 기반 — 사운드는 떠있어도 자연스러움)
 	if (CurrentWeaponData.FireSound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(
 			World,
 			CurrentWeaponData.FireSound,
-			MuzzleLoc
+			GetMuzzleLocation()
 		);
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[MuzzleFlash] Spawned at %s"), *MuzzleLoc.ToString());
+	UE_LOG(LogTemp, Log, TEXT("[MuzzleFlash] Spawned attached to MuzzleSocket"));
 }
 
 void AWeaponBase::MulticastPlayEquipSound_Implementation()
