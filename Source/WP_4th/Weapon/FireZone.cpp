@@ -2,13 +2,11 @@
 
 #include "FireZone.h"
 #include "Components/BoxComponent.h"
-#include "Components/StaticMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "DrawDebugHelpers.h"
-#include "UObject/ConstructorHelpers.h"
 
 AFireZone::AFireZone()
 {
@@ -22,21 +20,6 @@ AFireZone::AFireZone()
 	DamageBox->SetBoxExtent(FVector(200.0f, 600.0f, 100.0f));
 	DamageBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	DamageBox->SetCollisionResponseToAllChannels(ECR_Overlap);
-
-	VisualMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("VisualMesh"));
-	VisualMesh->SetupAttachment(DamageBox);
-	VisualMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(
-		TEXT("/Engine/BasicShapes/Cube")
-	);
-	if (CubeMesh.Succeeded())
-	{
-		VisualMesh->SetStaticMesh(CubeMesh.Object);
-	}
-
-	// Cube 기본 100x100x100 → BoxExtent × 2 / 100 비율 (X=앞뒤 짧음, Y=좌우 김)
-	VisualMesh->SetRelativeScale3D(FVector(4.0f, 12.0f, 2.0f));
 }
 
 void AFireZone::BeginPlay()
@@ -78,15 +61,6 @@ void AFireZone::InitializeFireZone(float InDuration, float InTickInterval,
 			InRadius * 0.25f
 		);
 		DamageBox->SetBoxExtent(BoxExtent);
-
-		if (VisualMesh)
-		{
-			VisualMesh->SetRelativeScale3D(FVector(
-				BoxExtent.X * 2.0f / 100.0f,
-				BoxExtent.Y * 2.0f / 100.0f,
-				BoxExtent.Z * 2.0f / 100.0f
-			));
-		}
 	}
 
 	UE_LOG(LogTemp, Warning,

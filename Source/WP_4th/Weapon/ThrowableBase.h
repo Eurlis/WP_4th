@@ -62,7 +62,7 @@ public:
 	void ServerThrow(FVector ThrowDirection);
 
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastExplosionEffects(FVector ExplosionLocation);
+	void MulticastExplosionEffects(FVector ExplosionLocation, FVector ThrowDir);
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayThrowSound();

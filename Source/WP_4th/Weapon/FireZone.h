@@ -7,7 +7,6 @@
 #include "FireZone.generated.h"
 
 class UBoxComponent;
-class UStaticMeshComponent;
 
 UCLASS()
 class WP_4TH_API AFireZone : public AActor
@@ -28,9 +27,6 @@ protected:
 	// 수평 확장 박스 (직사각형 화염)
 	UPROPERTY(VisibleAnywhere, Category = "FireZone")
 	TObjectPtr<UBoxComponent> DamageBox;
-
-	UPROPERTY(VisibleAnywhere, Category = "FireZone")
-	TObjectPtr<UStaticMeshComponent> VisualMesh;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "FireZone")
 	float Duration = 5.0f;
