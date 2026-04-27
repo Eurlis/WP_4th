@@ -4,15 +4,17 @@
 #include "Character/Wraith/Wraith.h"
 #include "KismetAnimationLibrary.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Weapon/WeaponBase.h"
 
 void UWraithAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
 	Super::NativeUpdateAnimation(DeltaSeconds);
-
+	
 	if (!OwnerCharacter)
 		OwnerCharacter = Cast<AWraith>(TryGetPawnOwner());
 	if (!OwnerCharacter) return;
 
+	
 	Speed         = OwnerCharacter->GetVelocity().Size2D();
 	AnimDirection = UKismetAnimationLibrary::CalculateDirection(OwnerCharacter->GetVelocity(), OwnerCharacter->GetActorRotation());
 	bIsWalking = Speed > 0.f && OwnerCharacter->GetCharacterMovement()->IsMovingOnGround();
@@ -25,5 +27,17 @@ void UWraithAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	bIsSlideExiting = SlidePhase == ESlideAnimationPhase::Exit;
 	if (bIsSlideExiting)
 	{
+	}
+
+	// Left hand IK: 총의 left_hand_socket → 캐릭터 메쉬 컴포넌트 공간으로 변환
+	AWeaponBase* Weapon = OwnerCharacter->CurrentWeapon;
+	USkeletalMeshComponent* FPMesh = OwnerCharacter->GetFirstPersonMesh();
+	if (Weapon && Weapon->WeaponMesh1P && FPMesh)
+	{
+		FTransform SocketWorldL = Weapon->WeaponMesh1P->GetSocketTransform(FName("left_hand_socket"));
+		LeftHandLocation = SocketWorldL.GetRelativeTransform(FPMesh->GetComponentTransform()).GetLocation();
+		FTransform SocketWorldR = Weapon->WeaponMesh1P->GetSocketTransform(FName("Right_hand_socket"));
+		RightHandLocation = SocketWorldR.GetRelativeTransform(FPMesh->GetComponentTransform()).GetLocation();
+		
 	}
 }

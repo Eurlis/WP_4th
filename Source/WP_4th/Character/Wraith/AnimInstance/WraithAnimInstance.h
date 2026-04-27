@@ -17,7 +17,7 @@ class WP_4TH_API UWraithAnimInstance : public UAnimInstance
 
 public:
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
-
+	
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	float Speed;
 
@@ -47,7 +47,12 @@ public:
 	
 	UPROPERTY(BlueprintReadOnly, Category = "Movement")
 	float AnimDirection;
-	
+
+	UPROPERTY(BlueprintReadOnly, Category = "IK")
+	FVector LeftHandLocation;
+	UPROPERTY(BlueprintReadOnly, Category = "IK")
+	FVector RightHandLocation;
+
 private:
 	UPROPERTY()
 	TObjectPtr<AWraith> OwnerCharacter;
