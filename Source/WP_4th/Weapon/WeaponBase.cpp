@@ -238,6 +238,38 @@ FVector AWeaponBase::GetMuzzleForward() const
 	return GetActorForwardVector();
 }
 
+FVector AWeaponBase::CalculateAimTarget() const
+{
+	constexpr float MaxRange = 50000.0f;
+
+	UWorld* World = GetWorld();
+	if (!World || !OwningCharacter)
+	{
+		return GetMuzzleLocation() + GetMuzzleForward() * MaxRange;
+	}
+
+	APlayerController* PC = Cast<APlayerController>(OwningCharacter->GetController());
+	if (!PC)
+	{
+		return GetMuzzleLocation() + GetMuzzleForward() * MaxRange;
+	}
+
+	FVector CamLoc;
+	FRotator CamRot;
+	PC->GetPlayerViewPoint(CamLoc, CamRot);
+	const FVector TraceEnd = CamLoc + CamRot.Vector() * MaxRange;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(WeaponAimTrace), true);
+	Params.AddIgnoredActor(OwningCharacter);
+	Params.AddIgnoredActor(this);
+
+	FHitResult Hit;
+	const bool bHit = World->LineTraceSingleByChannel(
+		Hit, CamLoc, TraceEnd, ECC_Visibility, Params);
+
+	return bHit ? Hit.ImpactPoint : TraceEnd;
+}
+
 // ==================== Fire ====================
 
 bool AWeaponBase::CanFireNow() const
@@ -303,27 +335,37 @@ void AWeaponBase::FireShot()
 	UE_LOG(LogTemp, Log, TEXT("[Weapon] Fired at %.2f, Next available at %.2f (MuzzleLoc: %s)"),
 		LastFireTime, LastFireTime + FireRate, *MuzzleLoc.ToString());
 
-	FVector AimDir;
+	// 표준 FPS 패턴: 카메라 ray로 조준 목표 산출 → 머즐에서 그 지점으로 발사
+	const FVector AimTarget = CalculateAimTarget();
+	constexpr float MinAimDistance = 100.0f;
+	const float DistToTarget = FVector::Dist(MuzzleLoc, AimTarget);
 
-	// Get aim direction from controller
-	if (OwningCharacter)
+	FVector AimDir;
+	if (DistToTarget < MinAimDistance)
 	{
-		APlayerController* PC = Cast<APlayerController>(OwningCharacter->GetController());
-		if (PC)
+		// 너무 가까운 거리에 Hit하면 머즐→타겟 방향이 급격히 꺾임 — 카메라 정면으로 폴백
+		if (OwningCharacter)
 		{
-			FVector CamLoc;
-			FRotator CamRot;
-			PC->GetPlayerViewPoint(CamLoc, CamRot);
-			AimDir = CamRot.Vector();
+			if (APlayerController* PC = Cast<APlayerController>(OwningCharacter->GetController()))
+			{
+				FVector CamLoc;
+				FRotator CamRot;
+				PC->GetPlayerViewPoint(CamLoc, CamRot);
+				AimDir = CamRot.Vector();
+			}
+			else
+			{
+				AimDir = OwningCharacter->GetActorForwardVector();
+			}
 		}
 		else
 		{
-			AimDir = OwningCharacter->GetActorForwardVector();
+			AimDir = GetMuzzleForward();
 		}
 	}
 	else
 	{
-		AimDir = GetActorForwardVector();
+		AimDir = (AimTarget - MuzzleLoc).GetSafeNormal();
 	}
 
 	// Call Server RPC
@@ -432,18 +474,29 @@ void AWeaponBase::FireBurstShot()
 		return;
 	}
 
-	// 현재 에이밍 방향 재취득 (버스트 중 에임 이동 반영)
+	// 현재 에이밍 방향 재취득 (버스트 중 에임 이동 반영) — 머즐→카메라타겟 패턴
 	FVector MuzzleLoc = GetMuzzleLocation();
+	const FVector AimTarget = CalculateAimTarget();
+	constexpr float MinAimDistance = 100.0f;
+	const float DistToTarget = FVector::Dist(MuzzleLoc, AimTarget);
+
 	FVector AimDir = CachedBurstDir;
-	if (OwningCharacter)
+	if (DistToTarget < MinAimDistance)
 	{
-		if (APlayerController* PC = Cast<APlayerController>(OwningCharacter->GetController()))
+		if (OwningCharacter)
 		{
-			FVector CamLoc;
-			FRotator CamRot;
-			PC->GetPlayerViewPoint(CamLoc, CamRot);
-			AimDir = CamRot.Vector();
+			if (APlayerController* PC = Cast<APlayerController>(OwningCharacter->GetController()))
+			{
+				FVector CamLoc;
+				FRotator CamRot;
+				PC->GetPlayerViewPoint(CamLoc, CamRot);
+				AimDir = CamRot.Vector();
+			}
 		}
+	}
+	else
+	{
+		AimDir = (AimTarget - MuzzleLoc).GetSafeNormal();
 	}
 
 	CurrentAmmo = FMath::Max(0, CurrentAmmo - 1);

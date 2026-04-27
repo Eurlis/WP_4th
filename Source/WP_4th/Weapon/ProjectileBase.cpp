@@ -109,17 +109,20 @@ void AProjectileBase::Activate(FVector SpawnLocation, FVector Direction, float I
 	SetActorEnableCollision(true);
 	SetActorTickEnabled(true);
 
-	// Tracer 활성화 (CachedWeaponData.BulletTracerFX 가 있으면)
+	// Tracer 활성화 — 풀 재사용 시 이전 ribbon strand 잔재 차단
 	if (TracerComponent)
 	{
 		if (CachedWeaponData.BulletTracerFX)
 		{
+			TracerComponent->DeactivateImmediate();  // 잔류 strand 강제 클리어 (동기)
 			TracerComponent->SetAsset(CachedWeaponData.BulletTracerFX);
+			TracerComponent->SetVisibility(true);
+			TracerComponent->ResetSystem();
 			TracerComponent->Activate(true);
 		}
 		else
 		{
-			TracerComponent->Deactivate();
+			TracerComponent->DeactivateImmediate();
 		}
 	}
 
@@ -148,7 +151,8 @@ void AProjectileBase::Deactivate()
 
 	if (TracerComponent)
 	{
-		TracerComponent->Deactivate();
+		TracerComponent->DeactivateImmediate();  // lazy → 동기 정리, 잔류 strand 즉시 제거
+		TracerComponent->SetVisibility(false);   // 렌더 즉시 차단
 	}
 
 	SetActorHiddenInGame(true);

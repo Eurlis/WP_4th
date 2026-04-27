@@ -148,6 +148,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Weapon")
 	FVector GetMuzzleForward() const;
 
+	/** 카메라 ray로 LineTrace해서 조준 목표 지점(크로스헤어 끝점) 산출 */
+	UFUNCTION(BlueprintCallable, Category = "Weapon")
+	FVector CalculateAimTarget() const;
+
 	// ========== Fire ==========
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon|Fire")
 	float LastFireTime;
