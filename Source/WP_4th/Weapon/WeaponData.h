@@ -187,6 +187,12 @@ struct FWeaponData : public FTableRowBase
 	float FireZoneTickInterval = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary", meta=(EditCondition="bIsIncendiary"))
+	float FireZoneDamagePerTick = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary", meta=(EditCondition="bIsIncendiary"))
+	FVector FireZoneExtent = FVector(200.0f, 800.0f, 100.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable|Incendiary", meta=(EditCondition="bIsIncendiary"))
 	TSubclassOf<AFireZone> FireZoneClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Throwable")

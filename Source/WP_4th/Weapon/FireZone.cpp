@@ -28,7 +28,7 @@ void AFireZone::BeginPlay()
 }
 
 void AFireZone::InitializeFireZone(float InDuration, float InTickInterval,
-                                   float InDamagePerTick, float InRadius,
+                                   float InDamagePerTick, FVector InExtent,
                                    AActor* InInstigator)
 {
 	// 서버에서만 데이터 세팅 + 타이머 돌림 (클라 오용 방지)
@@ -49,17 +49,10 @@ void AFireZone::InitializeFireZone(float InDuration, float InTickInterval,
 		CachedInstigatorController = InstigatorPawn->GetController();
 	}
 
-	// Radius → Box 치수 변환 (투척 방향 수직 수평 확장)
-	//   앞뒤(X) = Radius × 0.5  (짧음)
-	//   좌우(Y) = Radius × 1.5  (김 ⭐ Apex 화염 패턴)
-	//   위아래(Z) = Radius × 0.25
-	if (InRadius > 0.0f && DamageBox)
+	// DataTable에서 직접 받은 BoxExtent 사용 (FireZoneExtent)
+	if (DamageBox && !InExtent.IsNearlyZero())
 	{
-		BoxExtent = FVector(
-			InRadius * 0.5f,
-			InRadius * 1.5f,
-			InRadius * 0.25f
-		);
+		BoxExtent = InExtent;
 		DamageBox->SetBoxExtent(BoxExtent);
 	}
 

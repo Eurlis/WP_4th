@@ -18,7 +18,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "FireZone")
 	void InitializeFireZone(float InDuration, float InTickInterval,
-	                        float InDamagePerTick, float InRadius,
+	                        float InDamagePerTick, FVector InExtent,
 	                        AActor* InInstigator);
 
 protected:

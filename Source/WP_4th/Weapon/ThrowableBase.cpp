@@ -383,25 +383,10 @@ void AThrowableBase::StickToTarget(const FHitResult& Hit)
 		: GetActorLocation();
 	TWeakObjectPtr<AActor> StuckActorWeak(StuckTarget);
 
-	UE_LOG(LogTemp, Warning,
-	       TEXT("[ArcStar] StickLoc 캐싱: PickupMesh=%s, ActorLoc=%s, ChosenLoc=%s"),
-	       PickupMesh ? *PickupMesh->GetComponentLocation().ToString() : TEXT("nullptr"),
-	       *GetActorLocation().ToString(),
-	       *StickLoc.ToString());
-
-	UE_LOG(LogTemp, Warning,
-	       TEXT("[ArcStar] StickToTarget called - StuckTarget=%s, Location=%s, bIsSticky=%d"),
-	       StuckTarget ? *StuckTarget->GetName() : TEXT("nullptr"),
-	       *StickLoc.ToString(),
-	       (int32)CurrentWeaponData.bIsSticky);
-
 	GetWorldTimerManager().SetTimer(
 		StickEffectTimerHandle,
 		FTimerDelegate::CreateLambda([this, StickLoc, StuckActorWeak]()
 		{
-			UE_LOG(LogTemp, Warning,
-			       TEXT("[ArcStar] 1초 타이머 발동! IsValid(this)=%d"),
-			       IsValid(this));
 			if (!IsValid(this)) return;
 			MulticastStickEffects(StickLoc, StuckActorWeak.Get());
 		}),
@@ -465,8 +450,8 @@ void AThrowableBase::Explode()
 			FireZone->InitializeFireZone(
 				CurrentWeaponData.FireZoneDuration,			// Duration (DT)
 				CurrentWeaponData.FireZoneTickInterval,		// TickInterval (DT)
-				CurrentWeaponData.ExplosionDamage,			// DamagePerTick (DT)
-				CurrentWeaponData.ExplosionRadius,			// Radius (DT)
+				CurrentWeaponData.FireZoneDamagePerTick,	// DamagePerTick (DT, 별도 필드)
+				CurrentWeaponData.FireZoneExtent,			// BoxExtent (DT, 직접 지정)
 				OwningCharacter								// Instigator (시전자도 피해)
 			);
 
@@ -503,9 +488,6 @@ void AThrowableBase::Explode()
 	);
 
 	MulticastExplosionEffects(ExplosionLocation, ThrowDir);
-
-	// Debug sphere
-	DrawDebugSphere(GetWorld(), ExplosionLocation, ExplosionRadius, 16, FColor::Yellow, false, 2.0f);
 
 	// Arc Star가 캐릭터에 붙어있던 경우, Destroy 전에 Detach (캐릭터 변형 방지)
 	if (bIsStuck)
@@ -545,20 +527,15 @@ void AThrowableBase::MulticastExplosionEffects_Implementation(FVector ExplosionL
 	}
 
 	// 3. FireFX — Thermite 소이 화염 (bIsIncendiary=true 전용)
-	// 던진 방향을 따라 라인으로 N개 스폰 (Apex 화염 라인 효과)
-	UE_LOG(LogTemp, Warning,
-	       TEXT("[Thermite] FireFX 체크: bIsIncendiary=%d, FireFX=%s, ExplosionLocation=%s, ThrowDir=%s"),
-	       (int32)CurrentWeaponData.bIsIncendiary,
-	       CurrentWeaponData.FireFX ? *CurrentWeaponData.FireFX->GetName() : TEXT("nullptr"),
-	       *ExplosionLocation.ToString(),
-	       *ThrowDir.ToString());
-
+	// 던진 방향에 수직으로 라인 N개 스폰 (Apex 화염 라인 효과)
 	if (CurrentWeaponData.bIsIncendiary && CurrentWeaponData.FireFX)
 	{
-		const FVector FlameDir = ThrowDir.IsNearlyZero()
+		const FVector ThrowDir2D = ThrowDir.IsNearlyZero()
 			? FVector::ForwardVector
 			: ThrowDir.GetSafeNormal2D();
-		const FRotator FlameRot = FlameDir.Rotation();
+		// 던진 방향과 수직 (90도 회전): (X,Y) → (-Y,X)
+		const FVector PerpDir = FVector(-ThrowDir2D.Y, ThrowDir2D.X, 0.0f);
+		const FRotator FlameRot = PerpDir.Rotation();
 
 		constexpr int32 FlameCount = 7;
 		constexpr float FlameSpacing = 100.0f;	// 100cm 간격
@@ -566,9 +543,9 @@ void AThrowableBase::MulticastExplosionEffects_Implementation(FVector ExplosionL
 
 		for (int32 i = -Half; i <= Half; i++)
 		{
-			FVector FlameLocation = ExplosionLocation + FlameDir * (i * FlameSpacing);
+			FVector FlameLocation = ExplosionLocation + PerpDir * (i * FlameSpacing);
 			FlameLocation.Z += 50.0f;	// 데칼이 바닥에 투영되도록 50cm 띄움
-			UNiagaraComponent* SpawnedComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 				World,
 				CurrentWeaponData.FireFX,
 				FlameLocation,
@@ -577,24 +554,7 @@ void AThrowableBase::MulticastExplosionEffects_Implementation(FVector ExplosionL
 				true,	// bAutoDestroy
 				true	// bAutoActivate
 			);
-
-			UE_LOG(LogTemp, Warning,
-			       TEXT("[Thermite] FireFX %d 스폰: Location=%s, Component=%s"),
-			       i,
-			       *FlameLocation.ToString(),
-			       SpawnedComp ? TEXT("성공") : TEXT("nullptr"));
 		}
-
-		UE_LOG(LogTemp, Warning,
-		       TEXT("[Thermite] FireFX %d개 스폰 완료, FlameDir=%s"),
-		       FlameCount, *FlameDir.ToString());
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning,
-		       TEXT("[Thermite] FireFX 스폰 조건 미충족 - bIsIncendiary=%d, FireFX=%s"),
-		       (int32)CurrentWeaponData.bIsIncendiary,
-		       CurrentWeaponData.FireFX ? TEXT("OK") : TEXT("nullptr"));
 	}
 
 	// 4. ShockFX 정리 — 부착 시점에 스폰된 감전 이펙트 종료
@@ -603,21 +563,12 @@ void AThrowableBase::MulticastExplosionEffects_Implementation(FVector ExplosionL
 		ActiveShockFXComponent->Deactivate();
 		ActiveShockFXComponent = nullptr;
 	}
-
-	DrawDebugSphere(World, ExplosionLocation, ExplosionRadius, 16, FColor::Yellow, false, 2.0f);
 }
 
 void AThrowableBase::MulticastStickEffects_Implementation(FVector StickLocation, AActor* StuckActor)
 {
-	UE_LOG(LogTemp, Warning,
-	       TEXT("[ArcStar] MulticastStickEffects 호출! bIsSticky=%d, ShockFX=%s, StuckActor=%s"),
-	       (int32)CurrentWeaponData.bIsSticky,
-	       CurrentWeaponData.ShockFX ? *CurrentWeaponData.ShockFX->GetName() : TEXT("nullptr"),
-	       StuckActor ? *StuckActor->GetName() : TEXT("nullptr (벽/바닥)"));
-
 	if (!CurrentWeaponData.bIsSticky)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[ArcStar] 스폰 조건 미충족 - bIsSticky=false"));
 		return;
 	}
 
@@ -637,17 +588,6 @@ void AThrowableBase::MulticastStickEffects_Implementation(FVector StickLocation,
 			false,  // bAutoDestroy = false (Explode에서 수동 정리)
 			true    // bAutoActivate
 		);
-
-		UE_LOG(LogTemp, Warning,
-		       TEXT("[ArcStar] ShockFX 스폰 - 의도 위치: %s, 실제: %s"),
-		       *StickLocation.ToString(),
-		       ActiveShockFXComponent
-		           ? *ActiveShockFXComponent->GetComponentLocation().ToString()
-		           : TEXT("nullptr"));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[ArcStar] 스폰 조건 미충족 - ShockFX=nullptr"));
 	}
 
 	// ArcStar 부착 사운드 (ExplosionSound 재사용 — 폭발 시점에는 스킵됨)
