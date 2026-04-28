@@ -51,6 +51,10 @@ struct FWeaponData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Info")
 	UTexture2D* WeaponIcon = nullptr;
 
+	/** 탄종 아이콘 (HUD 표시용 - Light/Heavy/Energy/Sniper/Shotgun) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Info")
+	UTexture2D* AmmoIcon = nullptr;
+
 	// ===== 메시 =====
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Mesh")
 	USkeletalMesh* WeaponMesh1P = nullptr;
