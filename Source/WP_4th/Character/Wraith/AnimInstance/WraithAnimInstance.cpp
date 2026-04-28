@@ -34,10 +34,9 @@ void UWraithAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	USkeletalMeshComponent* FPMesh = OwnerCharacter->GetFirstPersonMesh();
 	if (Weapon && Weapon->WeaponMesh1P && FPMesh)
 	{
+		// 왼손 총기 Attach
 		FTransform SocketWorldL = Weapon->WeaponMesh1P->GetSocketTransform(FName("left_hand_socket"));
 		LeftHandLocation = SocketWorldL.GetRelativeTransform(FPMesh->GetComponentTransform()).GetLocation();
-		FTransform SocketWorldR = Weapon->WeaponMesh1P->GetSocketTransform(FName("Right_hand_socket"));
-		RightHandLocation = SocketWorldR.GetRelativeTransform(FPMesh->GetComponentTransform()).GetLocation();
 		
 	}
 }

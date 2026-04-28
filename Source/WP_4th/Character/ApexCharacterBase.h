@@ -33,6 +33,7 @@ class WP_4TH_API AApexCharacterBase : public ACharacter
 	GENERATED_BODY()
 
 	// ─── First Person Components ──────────────────────────────────
+protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	USkeletalMeshComponent* FirstPersonMesh;
 
@@ -43,7 +44,6 @@ public:
 	AApexCharacterBase();
 	
 	void EquipWeapon(FName WeaponID);
-	
 	// ─── Components ───────────────────────────────────────────────
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UHealthComponent* HealthComponent;
