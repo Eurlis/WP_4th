@@ -24,7 +24,7 @@ AApexCharacterBase::AApexCharacterBase()
 
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("First Person Camera"));
 	FirstPersonCameraComponent->SetupAttachment(FirstPersonMesh, FName("head"));
-	FirstPersonCameraComponent->SetRelativeLocationAndRotation(FVector(-2.8f, 5.89f, 0.0f), FRotator(0.0f, 90.0f, -90.0f));
+	FirstPersonCameraComponent->SetRelativeLocationAndRotation(FVector(15.748037,12.499209,-0.000011), FRotator(0.000000,71.172832,0.000000));
 	FirstPersonCameraComponent->bUsePawnControlRotation = true;
 	FirstPersonCameraComponent->bEnableFirstPersonFieldOfView = true;
 	FirstPersonCameraComponent->bEnableFirstPersonScale = true;
@@ -70,6 +70,48 @@ AApexCharacterBase::AApexCharacterBase()
 	DefaultMaxWalkSpeedCrouched = MovementComponent->MaxWalkSpeedCrouched;
 
 	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+
+	//Weapon Setting
+	ConstructorHelpers::FClassFinder<AWeaponBase> BP_Generic (TEXT("/Game/OJJ/BP/BP_Weapon_Generic.BP_Weapon_Generic_C"));
+	if (BP_Generic.Succeeded()) GenericWeaponClass = BP_Generic.Class;
+	//Input Setting 
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Jump(TEXT("/Game/Input/Actions/IA_Jump.IA_Jump"));
+	if (IA_Jump.Succeeded()) JumpAction = IA_Jump.Object;
+	
+	// MoveAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Move(TEXT("/Game/Input/Actions/IA_Move.IA_Move"));
+	if (IA_Move.Succeeded()) MoveAction = IA_Move.Object;
+	
+	// LookAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Look(TEXT("/Game/Input/Actions/IA_Look.IA_Look"));
+	if (IA_Look.Succeeded()) LookAction = IA_Look.Object;
+	
+	// MouseLookAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_MouseLook(TEXT("/Game/Input/Actions/IA_MouseLook.IA_MouseLook"));
+	if (IA_MouseLook.Succeeded()) MouseLookAction = IA_MouseLook.Object;
+
+	// SprintAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Sprint(TEXT("/Game/Input/Actions/IA_Sprint.IA_Sprint"));
+	if (IA_Sprint.Succeeded()) SprintAction = IA_Sprint.Object;
+
+	// CrouchAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Crouch(TEXT("/Game/Input/Actions/IA_Crouch.IA_Crouch"));
+	if (IA_Crouch.Succeeded()) CrouchAction = IA_Crouch.Object;
+
+	// SlideAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Slide(TEXT("/Game/Input/Actions/IA_Slide.IA_Slide"));
+	if (IA_Slide.Succeeded()) SlideAction = IA_Slide.Object;
+
+	// FireAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Fire(TEXT("/Game/OJJ/Inputs/IA_Fire.IA_Fire"));
+	if (IA_Fire.Succeeded()) FireAction = IA_Fire.Object;
+
+	// ReloadAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Reload(TEXT("/Game/OJJ/Inputs/IA_Reload.IA_Reload"));
+	if (IA_Reload.Succeeded()) ReloadAction = IA_Reload.Object;
+	// AimAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Aim(TEXT("/Game/OJJ/Inputs/IA_Aim.IA_Aim"));
+	if (IA_Aim.Succeeded()) AimAction = IA_Aim.Object;
 }
 
 void AApexCharacterBase::EquipWeapon(FName WeaponID)
