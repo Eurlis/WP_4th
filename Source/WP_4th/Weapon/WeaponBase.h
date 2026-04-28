@@ -9,11 +9,25 @@
 
 class ABulletPoolManager;
 class UDataTable;
+class UTexture2D;
+
+// 탄약 변경 알림 (CurrentAmmo, MaxAmmo)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAmmoChangedSignature, int32, NewCurrentAmmo, int32, NewMaxAmmo);
+
+// 무기 변경 알림 (WeaponIcon, AmmoIcon, MaxAmmo)
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWeaponEquippedSignature, UTexture2D*, WeaponIcon, UTexture2D*, AmmoIcon, int32, NewMaxAmmo);
 
 UCLASS(Abstract)
 class WP_4TH_API AWeaponBase : public AItemBase
 {
 	GENERATED_BODY()
+
+public:
+	UPROPERTY(BlueprintAssignable, Category = "Weapon|Events")
+	FOnAmmoChangedSignature OnAmmoChanged;
+
+	UPROPERTY(BlueprintAssignable, Category = "Weapon|Events")
+	FOnWeaponEquippedSignature OnWeaponEquipped;
 
 public:
 	AWeaponBase();
