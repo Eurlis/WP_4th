@@ -14,6 +14,7 @@ enum class EJunRingPhaseState : uint8
 {
 	Inactive,
 	Waiting,
+	Paused,
 	Shrinking,
 	Completed
 };
@@ -35,8 +36,38 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ring")
 	void StartRing();
 
+	UFUNCTION(BlueprintCallable, Category = "Ring|Balance")
+	bool InitFromDataTable(UDataTable* InTable);
+
+	UFUNCTION(BlueprintCallable, Category = "Ring|Balance")
+	bool InitFromPhaseRows(const TArray<FJunRingPhaseRow>& InRows);
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void StopRing();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void PauseRing();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void ResumeRing();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void ResetRing();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void ResetForRound();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	bool AdvanceToPhase(int32 PhaseIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Ring|Balance")
+	bool ReloadRingData();
+
 	UFUNCTION(BlueprintPure, Category = "Ring")
 	float GetCurrentRadius() const { return CurrentRadius; }
+
+	UFUNCTION(BlueprintPure, Category = "Ring")
+	float GetTargetRadius() const { return PhaseTargetRadius; }
 
 	UFUNCTION(BlueprintPure, Category = "Ring")
 	int32 GetCurrentPhaseIndex() const { return CurrentPhaseIndex; }
@@ -48,7 +79,16 @@ public:
 	bool IsRingShrinking() const { return bIsShrinking; }
 
 	UFUNCTION(BlueprintPure, Category = "Ring")
+	bool IsRingPaused() const { return bIsPaused; }
+
+	UFUNCTION(BlueprintPure, Category = "Ring")
+	bool IsRingActive() const { return bRingStarted && PhaseState != EJunRingPhaseState::Inactive; }
+
+	UFUNCTION(BlueprintPure, Category = "Ring")
 	FVector GetRingCenter() const { return RingCenter; }
+
+	UFUNCTION(BlueprintPure, Category = "Ring")
+	FVector GetTargetRingCenter() const { return TargetRingCenter; }
 
 	UFUNCTION(BlueprintCallable, Category = "Ring")
 	void SetRingCenter(const FVector& NewRingCenter);
@@ -65,7 +105,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ring")
 	bool bUseOwnerLocationAsCenter;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ring")
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadOnly, Category = "Ring")
 	FVector RingCenter;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ring", meta = (ClampMin = "0.0"))
@@ -82,6 +122,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ring|Debug")
 	float DebugDrawDuration;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ring|Debug")
+	bool bLogValidationDetails;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ring|Damage")
 	TSubclassOf<UDamageType> RingDamageType;
@@ -102,15 +145,30 @@ protected:
 	bool bIsShrinking;
 
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ring")
+	bool bIsPaused;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ring")
 	EJunRingPhaseState PhaseState;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ring")
+	FVector TargetRingCenter;
 
 private:
 	void LoadRingPhasesFromDataTable();
+	void NormalizeDefaultPhasesForInitialRadius();
+	bool ValidateRingPhases(const TArray<FJunRingPhaseRow>& CandidatePhases, FString& OutReason) const;
 	void BeginPhase(int32 PhaseIndex);
 	void StartShrinkForCurrentPhase();
 	void CompletePhase();
 	void ApplyRingDamage();
 	bool IsOutsideRing(const FVector& TargetLocation) const;
+	void ClearRingTimers();
+	void ApplyPhaseCenterPolicy(const FJunRingPhaseRow& Phase);
+	void UpdateCurrentRadiusFromShrinkTime();
+	float GetPhaseWaitTime(const FJunRingPhaseRow& Phase) const;
+	float GetPhaseShrinkTime(const FJunRingPhaseRow& Phase) const;
+	float GetPhaseDamageInterval(const FJunRingPhaseRow& Phase) const;
+	float GetPhaseDamageAmount(const FJunRingPhaseRow& Phase) const;
 
 	UFUNCTION()
 	void OnRep_CurrentRadius();
@@ -120,8 +178,11 @@ private:
 	FTimerHandle DamageTickTimerHandle;
 
 	float PhaseStartRadius;
+	UPROPERTY(Replicated)
 	float PhaseTargetRadius;
 	float ShrinkStartTime;
 	float ShrinkEndTime;
 	float PhaseStateEndTime;
+	float PausedPhaseTimeRemaining;
+	float PausedShrinkTimeRemaining;
 };

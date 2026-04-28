@@ -15,7 +15,7 @@ UJunRingComponent::UJunRingComponent()
 	PrimaryComponentTick.bCanEverTick = true;
 	SetIsReplicatedByDefault(true);
 
-	bStartAutomatically = false;
+	bStartAutomatically = true;
 	bUseOwnerLocationAsCenter = true;
 	RingCenter = FVector::ZeroVector;
 	InitialRadius = 10000.f;
@@ -24,8 +24,8 @@ UJunRingComponent::UJunRingComponent()
 	FJunRingPhaseRow OpeningPhase;
 	OpeningPhase.PhaseIndex = 0;
 	OpeningPhase.TargetRadius = 8000.f;
-	OpeningPhase.WaitTime = 30.f;
-	OpeningPhase.ShrinkTime = 20.f;
+	OpeningPhase.WaitTime = 3.f;
+	OpeningPhase.ShrinkTime = 8.f;
 	OpeningPhase.DamageInterval = 1.f;
 	OpeningPhase.DamagePerTick = 2.f;
 	RingPhases.Add(OpeningPhase);
@@ -33,8 +33,8 @@ UJunRingComponent::UJunRingComponent()
 	FJunRingPhaseRow MidPhase;
 	MidPhase.PhaseIndex = 1;
 	MidPhase.TargetRadius = 4000.f;
-	MidPhase.WaitTime = 20.f;
-	MidPhase.ShrinkTime = 15.f;
+	MidPhase.WaitTime = 3.f;
+	MidPhase.ShrinkTime = 6.f;
 	MidPhase.DamageInterval = 0.75f;
 	MidPhase.DamagePerTick = 5.f;
 	RingPhases.Add(MidPhase);
@@ -42,8 +42,8 @@ UJunRingComponent::UJunRingComponent()
 	FJunRingPhaseRow FinalPhase;
 	FinalPhase.PhaseIndex = 2;
 	FinalPhase.TargetRadius = 1500.f;
-	FinalPhase.WaitTime = 12.f;
-	FinalPhase.ShrinkTime = 10.f;
+	FinalPhase.WaitTime = 2.f;
+	FinalPhase.ShrinkTime = 5.f;
 	FinalPhase.DamageInterval = 0.5f;
 	FinalPhase.DamagePerTick = 8.f;
 	RingPhases.Add(FinalPhase);
@@ -52,15 +52,20 @@ UJunRingComponent::UJunRingComponent()
 	CurrentPhaseIndex = INDEX_NONE;
 	bRingStarted = false;
 	bIsShrinking = false;
+	bIsPaused = false;
 	PhaseState = EJunRingPhaseState::Inactive;
-	bEnableDebugDraw = false;
+	bEnableDebugDraw = true;
 	DebugDrawDuration = 0.f;
+	bLogValidationDetails = true;
 	RingDamageType = UJunRingDamageType::StaticClass();
 	PhaseStartRadius = InitialRadius;
 	PhaseTargetRadius = InitialRadius;
+	TargetRingCenter = RingCenter;
 	ShrinkStartTime = 0.f;
 	ShrinkEndTime = 0.f;
 	PhaseStateEndTime = 0.f;
+	PausedPhaseTimeRemaining = 0.f;
+	PausedShrinkTimeRemaining = 0.f;
 }
 
 void UJunRingComponent::BeginPlay()
@@ -70,6 +75,7 @@ void UJunRingComponent::BeginPlay()
 	CurrentRadius = InitialRadius;
 	PhaseStartRadius = InitialRadius;
 	PhaseTargetRadius = InitialRadius;
+	TargetRingCenter = RingCenter;
 
 	if (GetOwner() && GetOwner()->HasAuthority())
 	{
@@ -100,15 +106,7 @@ void UJunRingComponent::TickComponent(float DeltaTime, enum ELevelTick TickType,
 		return;
 	}
 
-	if (ShrinkEndTime <= ShrinkStartTime)
-	{
-		CurrentRadius = PhaseTargetRadius;
-		return;
-	}
-
-	const float CurrentTime = GetWorld()->GetTimeSeconds();
-	const float Alpha = FMath::Clamp((CurrentTime - ShrinkStartTime) / (ShrinkEndTime - ShrinkStartTime), 0.f, 1.f);
-	CurrentRadius = FMath::Lerp(PhaseStartRadius, PhaseTargetRadius, Alpha);
+	UpdateCurrentRadiusFromShrinkTime();
 
 	if (bEnableDebugDraw)
 	{
@@ -124,18 +122,191 @@ void UJunRingComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(UJunRingComponent, CurrentPhaseIndex);
 	DOREPLIFETIME(UJunRingComponent, bRingStarted);
 	DOREPLIFETIME(UJunRingComponent, bIsShrinking);
+	DOREPLIFETIME(UJunRingComponent, bIsPaused);
 	DOREPLIFETIME(UJunRingComponent, PhaseState);
+	DOREPLIFETIME(UJunRingComponent, RingCenter);
+	DOREPLIFETIME(UJunRingComponent, TargetRingCenter);
+	DOREPLIFETIME(UJunRingComponent, PhaseTargetRadius);
 }
 
 void UJunRingComponent::StartRing()
 {
-	if (!GetOwner() || !GetOwner()->HasAuthority() || bRingStarted || RingPhases.IsEmpty())
+	if (!GetOwner() || !GetOwner()->HasAuthority() || bRingStarted)
 	{
 		return;
 	}
 
+	if (!ReloadRingData())
+	{
+		UE_LOG(LogTemp, Error, TEXT("JunRingComponent: StartRing failed because ring phase data is invalid. Owner=%s"), *GetNameSafe(GetOwner()));
+		return;
+	}
+
 	bRingStarted = true;
+	bIsPaused = false;
+	UE_LOG(LogTemp, Log, TEXT("JunRingComponent: StartRing. Owner=%s InitialRadius=%.2f PhaseCount=%d"),
+		*GetNameSafe(GetOwner()),
+		InitialRadius,
+		RingPhases.Num());
 	BeginPhase(0);
+}
+
+bool UJunRingComponent::InitFromDataTable(UDataTable* InTable)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return false;
+	}
+
+	RingPhaseDataTable = InTable;
+	return ReloadRingData();
+}
+
+bool UJunRingComponent::InitFromPhaseRows(const TArray<FJunRingPhaseRow>& InRows)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return false;
+	}
+
+	TArray<FJunRingPhaseRow> CandidateRows = InRows;
+	Algo::Sort(CandidateRows, [](const FJunRingPhaseRow& Left, const FJunRingPhaseRow& Right)
+	{
+		return Left.PhaseIndex < Right.PhaseIndex;
+	});
+
+	FString ValidationError;
+	if (!ValidateRingPhases(CandidateRows, ValidationError))
+	{
+		UE_LOG(LogTemp, Error, TEXT("JunRingComponent: InitFromPhaseRows failed. %s"), *ValidationError);
+		return false;
+	}
+
+	RingPhases = CandidateRows;
+	return true;
+}
+
+void UJunRingComponent::StopRing()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
+	ClearRingTimers();
+	bRingStarted = false;
+	bIsShrinking = false;
+	bIsPaused = false;
+	CurrentPhaseIndex = INDEX_NONE;
+	PhaseState = EJunRingPhaseState::Inactive;
+	PhaseStateEndTime = 0.f;
+	PausedPhaseTimeRemaining = 0.f;
+	PausedShrinkTimeRemaining = 0.f;
+}
+
+void UJunRingComponent::PauseRing()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !bRingStarted || bIsPaused)
+	{
+		return;
+	}
+
+	UpdateCurrentRadiusFromShrinkTime();
+	const float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	PausedPhaseTimeRemaining = FMath::Max(0.f, PhaseStateEndTime - CurrentTime);
+	PausedShrinkTimeRemaining = FMath::Max(0.f, ShrinkEndTime - CurrentTime);
+	ClearRingTimers();
+	bIsPaused = true;
+	bIsShrinking = false;
+	PhaseState = EJunRingPhaseState::Paused;
+}
+
+void UJunRingComponent::ResumeRing()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !bRingStarted || !bIsPaused || !RingPhases.IsValidIndex(CurrentPhaseIndex))
+	{
+		return;
+	}
+
+	bIsPaused = false;
+
+	if (PausedShrinkTimeRemaining > 0.f)
+	{
+		PhaseState = EJunRingPhaseState::Shrinking;
+		bIsShrinking = true;
+		PhaseStartRadius = CurrentRadius;
+		ShrinkStartTime = GetWorld()->GetTimeSeconds();
+		ShrinkEndTime = ShrinkStartTime + PausedShrinkTimeRemaining;
+		PhaseStateEndTime = ShrinkEndTime;
+		GetWorld()->GetTimerManager().SetTimer(PhaseEndTimerHandle, this, &UJunRingComponent::CompletePhase, PausedShrinkTimeRemaining, false);
+	}
+	else
+	{
+		PhaseState = EJunRingPhaseState::Waiting;
+		bIsShrinking = false;
+		PhaseStateEndTime = GetWorld()->GetTimeSeconds() + PausedPhaseTimeRemaining;
+		GetWorld()->GetTimerManager().SetTimer(PhaseStartTimerHandle, this, &UJunRingComponent::StartShrinkForCurrentPhase, PausedPhaseTimeRemaining, false);
+	}
+
+	const FJunRingPhaseRow& Phase = RingPhases[CurrentPhaseIndex];
+	GetWorld()->GetTimerManager().SetTimer(DamageTickTimerHandle, this, &UJunRingComponent::ApplyRingDamage, GetPhaseDamageInterval(Phase), true);
+	PausedPhaseTimeRemaining = 0.f;
+	PausedShrinkTimeRemaining = 0.f;
+}
+
+void UJunRingComponent::ResetRing()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
+	StopRing();
+	CurrentRadius = InitialRadius;
+	PhaseStartRadius = InitialRadius;
+	PhaseTargetRadius = InitialRadius;
+	TargetRingCenter = RingCenter;
+}
+
+void UJunRingComponent::ResetForRound()
+{
+	ResetRing();
+}
+
+bool UJunRingComponent::AdvanceToPhase(int32 PhaseIndex)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority() || !RingPhases.IsValidIndex(PhaseIndex))
+	{
+		return false;
+	}
+
+	bRingStarted = true;
+	bIsPaused = false;
+	BeginPhase(PhaseIndex);
+	return true;
+}
+
+bool UJunRingComponent::ReloadRingData()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return false;
+	}
+
+	LoadRingPhasesFromDataTable();
+	if (!RingPhaseDataTable)
+	{
+		NormalizeDefaultPhasesForInitialRadius();
+	}
+
+	FString ValidationError;
+	if (!ValidateRingPhases(RingPhases, ValidationError))
+	{
+		UE_LOG(LogTemp, Error, TEXT("JunRingComponent: invalid ring phase data. %s"), *ValidationError);
+		return false;
+	}
+
+	return true;
 }
 
 void UJunRingComponent::SetRingCenter(const FVector& NewRingCenter)
@@ -146,6 +317,7 @@ void UJunRingComponent::SetRingCenter(const FVector& NewRingCenter)
 	}
 
 	RingCenter = NewRingCenter;
+	TargetRingCenter = NewRingCenter;
 }
 
 float UJunRingComponent::GetPhaseTimeRemaining() const
@@ -174,6 +346,7 @@ void UJunRingComponent::LoadRingPhasesFromDataTable()
 	RingPhaseDataTable->GetAllRows(TEXT("JunRingPhaseDataLoad"), Rows);
 	if (Rows.IsEmpty())
 	{
+		UE_LOG(LogTemp, Error, TEXT("JunRingComponent: RingPhaseDataTable has no rows. Table=%s"), *GetNameSafe(RingPhaseDataTable));
 		return;
 	}
 
@@ -192,6 +365,101 @@ void UJunRingComponent::LoadRingPhasesFromDataTable()
 	});
 }
 
+void UJunRingComponent::NormalizeDefaultPhasesForInitialRadius()
+{
+	constexpr float AuthoredDefaultInitialRadius = 10000.f;
+	if (InitialRadius <= 0.f || RingPhases.IsEmpty())
+	{
+		return;
+	}
+
+	const bool bNeedsRadiusScale = !FMath::IsNearlyEqual(InitialRadius, AuthoredDefaultInitialRadius) && RingPhases[0].TargetRadius > InitialRadius;
+	if (!bNeedsRadiusScale)
+	{
+		for (FJunRingPhaseRow& Phase : RingPhases)
+		{
+			Phase.WaitTime = FMath::Min(Phase.WaitTime, 3.f);
+			Phase.ShrinkTime = FMath::Min(Phase.ShrinkTime, 8.f);
+		}
+		return;
+	}
+
+	const float RadiusScale = InitialRadius / AuthoredDefaultInitialRadius;
+	for (FJunRingPhaseRow& Phase : RingPhases)
+	{
+		if (Phase.Radius > 0.f)
+		{
+			Phase.Radius *= RadiusScale;
+		}
+
+		Phase.TargetRadius *= RadiusScale;
+		Phase.WaitTime = FMath::Min(Phase.WaitTime, 3.f);
+		Phase.ShrinkTime = FMath::Min(Phase.ShrinkTime, 8.f);
+	}
+
+	if (bLogValidationDetails)
+	{
+		UE_LOG(LogTemp, Log, TEXT("JunRingComponent: scaled built-in ring phases for InitialRadius %.2f with scale %.3f. Owner=%s"),
+			InitialRadius,
+			RadiusScale,
+			*GetNameSafe(GetOwner()));
+	}
+}
+
+bool UJunRingComponent::ValidateRingPhases(const TArray<FJunRingPhaseRow>& CandidatePhases, FString& OutReason) const
+{
+	if (CandidatePhases.IsEmpty())
+	{
+		OutReason = TEXT("RingPhases is empty.");
+		return false;
+	}
+
+	int32 ExpectedPhaseIndex = 0;
+	float PreviousTargetRadius = InitialRadius;
+	for (const FJunRingPhaseRow& Phase : CandidatePhases)
+	{
+		if (Phase.PhaseIndex != ExpectedPhaseIndex)
+		{
+			OutReason = FString::Printf(TEXT("PhaseIndex must be sequential. Expected=%d Actual=%d"), ExpectedPhaseIndex, Phase.PhaseIndex);
+			return false;
+		}
+
+		if (Phase.TargetRadius < 0.f)
+		{
+			OutReason = FString::Printf(TEXT("Phase %d TargetRadius must be >= 0."), Phase.PhaseIndex);
+			return false;
+		}
+
+		if (Phase.TargetRadius > PreviousTargetRadius && Phase.Radius <= 0.f)
+		{
+			OutReason = FString::Printf(TEXT("Phase %d TargetRadius grows from previous radius without explicit Radius."), Phase.PhaseIndex);
+			return false;
+		}
+
+		if (GetPhaseWaitTime(Phase) < 0.f || GetPhaseShrinkTime(Phase) < 0.f)
+		{
+			OutReason = FString::Printf(TEXT("Phase %d timing values must be >= 0."), Phase.PhaseIndex);
+			return false;
+		}
+
+		if (GetPhaseDamageInterval(Phase) <= 0.f)
+		{
+			OutReason = FString::Printf(TEXT("Phase %d DamageTickInterval/DamageInterval must be > 0."), Phase.PhaseIndex);
+			return false;
+		}
+
+		PreviousTargetRadius = Phase.TargetRadius;
+		++ExpectedPhaseIndex;
+	}
+
+	if (bLogValidationDetails)
+	{
+		UE_LOG(LogTemp, Log, TEXT("JunRingComponent: validated %d ring phases for %s."), CandidatePhases.Num(), *GetNameSafe(GetOwner()));
+	}
+
+	return true;
+}
+
 void UJunRingComponent::BeginPhase(int32 PhaseIndex)
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority() || !RingPhases.IsValidIndex(PhaseIndex))
@@ -199,30 +467,52 @@ void UJunRingComponent::BeginPhase(int32 PhaseIndex)
 		return;
 	}
 
+	ClearRingTimers();
 	CurrentPhaseIndex = PhaseIndex;
 	bIsShrinking = false;
+	bIsPaused = false;
 	PhaseState = EJunRingPhaseState::Waiting;
 
 	const FJunRingPhaseRow& Phase = RingPhases[PhaseIndex];
-	GetWorld()->GetTimerManager().ClearTimer(PhaseStartTimerHandle);
-	GetWorld()->GetTimerManager().ClearTimer(PhaseEndTimerHandle);
-	GetWorld()->GetTimerManager().ClearTimer(DamageTickTimerHandle);
+	ApplyPhaseCenterPolicy(Phase);
 
-	PhaseStateEndTime = GetWorld()->GetTimeSeconds() + Phase.WaitTime;
+	if (Phase.Radius > 0.f)
+	{
+		CurrentRadius = Phase.Radius;
+	}
+
+	PhaseStartRadius = CurrentRadius;
+	PhaseTargetRadius = Phase.TargetRadius;
+	const float WaitTime = GetPhaseWaitTime(Phase);
+	PhaseStateEndTime = GetWorld()->GetTimeSeconds() + WaitTime;
+	UE_LOG(LogTemp, Log, TEXT("JunRingComponent: BeginPhase %d. CurrentRadius=%.2f TargetRadius=%.2f Wait=%.2f Shrink=%.2f Owner=%s"),
+		CurrentPhaseIndex,
+		CurrentRadius,
+		PhaseTargetRadius,
+		WaitTime,
+		GetPhaseShrinkTime(Phase),
+		*GetNameSafe(GetOwner()));
 
 	GetWorld()->GetTimerManager().SetTimer(
 		DamageTickTimerHandle,
 		this,
 		&UJunRingComponent::ApplyRingDamage,
-		FMath::Max(KINDA_SMALL_NUMBER, Phase.DamageInterval),
+		GetPhaseDamageInterval(Phase),
 		true);
 
-	GetWorld()->GetTimerManager().SetTimer(
-		PhaseStartTimerHandle,
-		this,
-		&UJunRingComponent::StartShrinkForCurrentPhase,
-		Phase.WaitTime,
-		false);
+	if (WaitTime <= 0.f)
+	{
+		StartShrinkForCurrentPhase();
+	}
+	else
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			PhaseStartTimerHandle,
+			this,
+			&UJunRingComponent::StartShrinkForCurrentPhase,
+			WaitTime,
+			false);
+	}
 }
 
 void UJunRingComponent::StartShrinkForCurrentPhase()
@@ -237,17 +527,31 @@ void UJunRingComponent::StartShrinkForCurrentPhase()
 	PhaseStartRadius = CurrentRadius;
 	PhaseTargetRadius = Phase.TargetRadius;
 	ShrinkStartTime = GetWorld()->GetTimeSeconds();
-	ShrinkEndTime = ShrinkStartTime + Phase.ShrinkTime;
+	const float ShrinkTime = GetPhaseShrinkTime(Phase);
+	ShrinkEndTime = ShrinkStartTime + ShrinkTime;
 	PhaseStateEndTime = ShrinkEndTime;
 	bIsShrinking = true;
 	PhaseState = EJunRingPhaseState::Shrinking;
+	UE_LOG(LogTemp, Log, TEXT("JunRingComponent: StartShrink phase %d from %.2f to %.2f over %.2f seconds. Owner=%s"),
+		CurrentPhaseIndex,
+		PhaseStartRadius,
+		PhaseTargetRadius,
+		ShrinkTime,
+		*GetNameSafe(GetOwner()));
 
-	GetWorld()->GetTimerManager().SetTimer(
-		PhaseEndTimerHandle,
-		this,
-		&UJunRingComponent::CompletePhase,
-		Phase.ShrinkTime,
-		false);
+	if (ShrinkTime <= 0.f)
+	{
+		CompletePhase();
+	}
+	else
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			PhaseEndTimerHandle,
+			this,
+			&UJunRingComponent::CompletePhase,
+			ShrinkTime,
+			false);
+	}
 }
 
 void UJunRingComponent::CompletePhase()
@@ -260,6 +564,10 @@ void UJunRingComponent::CompletePhase()
 	CurrentRadius = RingPhases[CurrentPhaseIndex].TargetRadius;
 	bIsShrinking = false;
 	PhaseState = EJunRingPhaseState::Completed;
+	UE_LOG(LogTemp, Log, TEXT("JunRingComponent: CompletePhase %d. Radius=%.2f Owner=%s"),
+		CurrentPhaseIndex,
+		CurrentRadius,
+		*GetNameSafe(GetOwner()));
 
 	const int32 NextPhaseIndex = CurrentPhaseIndex + 1;
 	if (RingPhases.IsValidIndex(NextPhaseIndex))
@@ -279,7 +587,7 @@ void UJunRingComponent::ApplyRingDamage()
 		return;
 	}
 
-	const float DamageAmount = RingPhases[CurrentPhaseIndex].DamagePerTick;
+	const float DamageAmount = GetPhaseDamageAmount(RingPhases[CurrentPhaseIndex]);
 
 	for (TActorIterator<APawn> It(GetWorld()); It; ++It)
 	{
@@ -295,6 +603,82 @@ void UJunRingComponent::ApplyRingDamage()
 			OnRingDamageApplied.Broadcast(Pawn);
 		}
 	}
+}
+
+void UJunRingComponent::ClearRingTimers()
+{
+	if (!GetWorld())
+	{
+		return;
+	}
+
+	GetWorld()->GetTimerManager().ClearTimer(PhaseStartTimerHandle);
+	GetWorld()->GetTimerManager().ClearTimer(PhaseEndTimerHandle);
+	GetWorld()->GetTimerManager().ClearTimer(DamageTickTimerHandle);
+}
+
+void UJunRingComponent::ApplyPhaseCenterPolicy(const FJunRingPhaseRow& Phase)
+{
+	switch (Phase.CenterMode)
+	{
+	case EJunRingCenterMode::OwnerLocation:
+		if (GetOwner())
+		{
+			RingCenter = GetOwner()->GetActorLocation();
+		}
+		break;
+	case EJunRingCenterMode::FixedLocation:
+		RingCenter = Phase.FixedCenter;
+		break;
+	case EJunRingCenterMode::KeepCurrent:
+	default:
+		break;
+	}
+
+	TargetRingCenter = RingCenter;
+}
+
+void UJunRingComponent::UpdateCurrentRadiusFromShrinkTime()
+{
+	if (!GetWorld() || !bIsShrinking)
+	{
+		return;
+	}
+
+	if (ShrinkEndTime <= ShrinkStartTime)
+	{
+		CurrentRadius = PhaseTargetRadius;
+		return;
+	}
+
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float Alpha = FMath::Clamp((CurrentTime - ShrinkStartTime) / (ShrinkEndTime - ShrinkStartTime), 0.f, 1.f);
+	CurrentRadius = FMath::Lerp(PhaseStartRadius, PhaseTargetRadius, Alpha);
+}
+
+float UJunRingComponent::GetPhaseWaitTime(const FJunRingPhaseRow& Phase) const
+{
+	return Phase.DelayBeforeShrink >= 0.f ? Phase.DelayBeforeShrink : Phase.WaitTime;
+}
+
+float UJunRingComponent::GetPhaseShrinkTime(const FJunRingPhaseRow& Phase) const
+{
+	return Phase.ShrinkDuration >= 0.f ? Phase.ShrinkDuration : Phase.ShrinkTime;
+}
+
+float UJunRingComponent::GetPhaseDamageInterval(const FJunRingPhaseRow& Phase) const
+{
+	return FMath::Max(KINDA_SMALL_NUMBER, Phase.DamageTickInterval > 0.f ? Phase.DamageTickInterval : Phase.DamageInterval);
+}
+
+float UJunRingComponent::GetPhaseDamageAmount(const FJunRingPhaseRow& Phase) const
+{
+	if (Phase.DamagePerSecond >= 0.f)
+	{
+		return Phase.DamagePerSecond * GetPhaseDamageInterval(Phase);
+	}
+
+	return Phase.DamagePerTick;
 }
 
 bool UJunRingComponent::IsOutsideRing(const FVector& TargetLocation) const

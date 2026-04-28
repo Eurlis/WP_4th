@@ -23,6 +23,11 @@
 
 ## Jun 문서 구조
 
+- `../../plans/`
+  - [zone_component_plan](../../plans/zone_component_plan.md)
+- `../../docs/reports/`
+  - [zone_component_research](../../docs/reports/zone_component_research.md)
+  - [zone_component_api](../../docs/reports/zone_component_api.md)
 - `Overview/`
   - [JunProjectCharter](Overview/JunProjectCharter.md)
   - [JunEngineeringHarness](Overview/JunEngineeringHarness.md)
@@ -44,6 +49,11 @@
 - 새 작업은 먼저 Jun 문서에 기록한다.
 - 기능 구현 전 목적, 영향 범위, 검증 방법을 적는다.
 - 공용 코드 변경은 하되, 문서는 Jun 소유가 분명하게 남긴다.
+- Ring 관련 추가 구현은 `plans/zone_component_plan.md` 승인 후 마일스톤 단위로 진행한다.
+- Codex/AI 작업 규칙은 루트 `AGENTS.md`가 아니라 [JunEngineeringHarness](Overview/JunEngineeringHarness.md)에 통합해서 관리한다.
+- 저장소를 먼저 검사하고 확인된 사실, 가정, 변경 이유, 검증 결과를 남긴 뒤 구현한다.
+- 네트워크 동작이 바뀌면 서버 권한 흐름과 복제 영향을 반드시 기록한다.
+- CSV/DataTable 값은 기획 변경 가능성이 높으므로 코드 상수보다 DataTable authoring 경로를 우선한다.
 
 ## Jun 현재 담당
 

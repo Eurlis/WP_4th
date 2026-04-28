@@ -1,4 +1,4 @@
-# Jun Engineering Harness
+﻿# Jun Engineering Harness
 
 ## 목적
 
@@ -20,12 +20,51 @@
 - 완료 기준이 무엇인가
 - 어떤 방식으로 검증할 것인가
 
+## 저장소 작업 모드
+
+- 이 저장소는 Unreal Engine 멀티플레이 게임 프로젝트로 취급한다.
+- Codex는 저장소를 인지하는 엔지니어링 팀원으로 동작하되, 임의로 전체 구조를 재설계하지 않는다.
+- 항상 저장소를 먼저 검사하고, 확인된 사실을 문서화한 뒤 가정한다.
+- Unreal Engine 버전, GameMode/GameState/PlayerState 클래스명, 플레이어 수, plugin availability, CSV workflow는 추정하지 않는다.
+- 불가피한 가정은 명시하고 범위를 최소화한다.
+
 ## 문서 운영 규칙
 
 - 방향성은 `Overview/JunProjectCharter.md` 기준으로 관리한다.
 - 우선순위는 `Overview/JunBacklog.md`에 반영한다.
 - 실제 세션 기록은 `Logs/JunSessionLog.md`에 남긴다.
 - 긴 설계는 `docs/` 아래 `Jun*.md` 파일로 확장한다.
+- Ring 시스템의 공식 계획은 `plans/zone_component_plan.md`를 기준으로 한다.
+- Ring 시스템의 공식 보고서는 `docs/reports/zone_component_research.md`와 `docs/reports/zone_component_api.md`를 기준으로 한다.
+- Ring 구현 코드는 계획 승인 후 마일스톤 단위로만 진행한다.
+- Ring 작업은 research-first 방식으로 진행하며, broad implementation 전에 Milestone 1 산출물 승인을 받는다.
+- 네트워크 동작이 바뀌는 변경은 authority flow와 replication impact를 함께 기록한다.
+- 루트 `AGENTS.md`는 별도 기준 문서로 유지하지 않는다. Jun 작업 규칙은 이 문서와 `JunReadme.md`에 통합한다.
+
+## Ring 아키텍처 규칙
+
+- 서버 권한이 Ring 상태와 phase 전환의 source of truth다.
+- GameMode 코드는 authority/orchestration으로 취급하고, GameState 또는 replicated Ring actor/component는 client-visible state 경로로 취급한다.
+- UI나 client-side logic은 GameMode-only state에 의존하지 않는다.
+- 클라이언트에는 최소 런타임 스냅샷만 복제한다.
+- 최소 스냅샷 기준: current phase index, current center, target center, current radius, target radius, phase start time 또는 elapsed time, started/paused/shrinking flags.
+- per-tick damage 결과는 복제하지 않는다.
+- 불필요한 Tick보다 timer-driven 또는 state-driven update를 우선한다.
+- UI-facing hook은 Blueprint-friendly API로 열되, 핵심 Ring 로직은 C++에 둔다.
+
+## Ring 재사용 규칙
+
+- 저장소가 단일 GameMode 계층을 강제하지 않는 한 Ring 기능을 특정 GameMode에 hard-code하지 않는다.
+- 우선 고려할 decoupling pattern은 `UJunRingComponent`를 가진 lightweight host actor, GameState의 최소 replicated state, 필요한 경우 UInterface 계약이다.
+- GameMode에 ActorComponent를 직접 붙이는 것이 기술적으로 애매하면, 목표를 유지한다: "GameMode에 쉽게 붙일 수 있는 authority integration + clients가 읽을 수 있는 replicated state path".
+- 현재 빠른 검증 경로는 `BP_JunRingHost + JunRingComponent`를 맵에 배치하는 방식이다.
+
+## 데이터 규칙
+
+- CSV -> DataTable workflow를 1급 authoring path로 지원한다.
+- 기존 row struct와 naming convention을 조사한 뒤 새 row/asset을 추가한다.
+- Editor reimport와 packaged runtime reload 차이는 명확히 문서화한다.
+- CSV/DataTable validation은 조용히 실패하지 말고 읽을 수 있는 로그를 남긴다.
 
 ## 코드 작업 규칙
 
@@ -33,6 +72,39 @@
 - 한 번에 하나의 책임만 바꾼다.
 - Unreal C++ 네이밍과 구조를 따른다.
 - 테스트가 없으면 최소한 수동 검증 기준이라도 적는다.
+- 계획 우선으로 진행한다. 단, 사용자가 명시적으로 구현을 승인한 마일스톤은 좁은 범위에서 끝까지 진행한다.
+- broad rename이나 unrelated replication policy 변경은 피한다.
+- third-party plugin은 명시적 필요성과 승인 없이는 추가하지 않는다.
+
+## 필수 산출물
+
+- 한국어 research/design report
+- API specification table
+- CSV schema proposal and sample CSV
+- DataTable load / validation / reload path 설명 또는 코드
+- phase progression pseudocode와 Mermaid flowchart
+- GameMode/GameState integration example
+- prioritized test scenario list
+- 구현 후 validation 기록
+
+## 마일스톤 보고 형식
+
+항상 아래 항목을 남긴다.
+
+1. 무엇을 검사했는지
+2. 무엇을 바꿨는지
+3. 왜 바꿨는지
+4. 수정한 파일
+5. 리스크와 미확정 사항
+6. 수행한 검증
+7. 다음 권장 마일스톤
+
+## 검증 정책
+
+- 기존 build/test/automation command가 있으면 사용한다.
+- 테스트 하네스가 없으면 최소 실용 검증 경로를 만든다.
+- 가능하면 data validation, phase progression, authority-only execution, replication snapshot correctness를 검증한다.
+- 검증 실패 시 범위 확장을 멈추고 수정하거나 명확히 보고한다.
 
 ## 세션 종료 시 반드시 남길 것
 

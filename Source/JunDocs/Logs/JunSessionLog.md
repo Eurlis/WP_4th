@@ -1,4 +1,4 @@
-# Jun Session Log
+﻿# Jun Session Log
 
 ## 템플릿
 
@@ -31,6 +31,40 @@
 ---
 
 ## Active Notes
+
+### 2026-04-28
+
+#### 목표
+
+- 새 Ring 작업 지침을 기존 Jun 링 제작 흐름에 통합
+- 기존 구현과 비교해 채택할 설계 기준 정리
+
+#### 변경 내용
+
+- `AGENTS.md` 추가
+- `plans/zone_component_plan.md` 추가
+- `docs/reports/zone_component_research.md` 추가
+- `docs/reports/zone_component_api.md` 추가
+- `JunReadme.md`와 `JunEngineeringHarness.md`에 새 Ring 계획 문서 링크 반영
+- 확장된 round-based team elimination Ring 계획 반영
+- 공식 Unreal 문서 기반 citation을 research report에 반영
+- API 문서에 CSV schema, replication snapshot, Blueprint hooks, Mermaid diagrams, test priorities 추가
+
+#### 검증
+
+- 기존 `JunRingComponent`, `JunDeathmatchGameState`, `JunBalanceData`를 확인하고 새 지침과의 차이를 문서화
+- 코드 추가 구현은 계획 승인 전 보류
+- `plans/zone_component_plan.md`, `docs/reports/zone_component_research.md`, `docs/reports/zone_component_api.md`를 UTF-8로 읽어 한글 출력 확인
+
+#### 남은 일
+
+- `plans/zone_component_plan.md` 승인 여부 확인
+- 승인 후 `JunRing*` 추가 또는 기존 `JunRing*` 리팩터링 방향 결정
+- Option B 기준 `AJunRingStateActor + UJunRingComponent` 구현 여부 결정
+
+#### 다음 세션 첫 작업
+
+- 승인된 방향에 따라 Ring runtime snapshot과 DataTable validation부터 구현
 
 ### 2026-04-24
 
@@ -97,3 +131,79 @@
 #### Follow-up
 
 - Apply the same API hygiene standard whenever external snippets or old Unreal tutorials are referenced
+
+### 2026-04-28 Ring Component Drop-in Pass
+
+#### Goal
+
+- Standardize current Jun documentation terminology on `Ring`
+- Make `UJunRingComponent` useful as a drop-in component on a simple host actor in any test mode
+- Keep the implementation scoped to Jun-owned Ring files
+
+#### Changes
+
+- Expanded `FJunRingPhaseRow` with optional CSV/DataTable fields for radius, delay, shrink duration, DPS, center mode, warning lead time, and notes
+- Kept backward compatibility with existing `WaitTime`, `ShrinkTime`, `DamageInterval`, and `DamagePerTick`
+- Added `StopRing`, `PauseRing`, `ResumeRing`, `ResetRing`, `ResetForRound`, `AdvanceToPhase`, and `ReloadRingData`
+- Added `InitFromDataTable` and `InitFromPhaseRows` to `UJunRingComponent`
+- Added matching control/read wrapper APIs to `AJunRingActor`
+- Enabled default auto-start and debug draw for fast PIE verification
+- Added readable Ring phase validation logs
+- Updated setup and validation checklists for the `BP_JunRingHost + JunRingComponent` smoke test path
+
+#### Validation
+
+- Built `WP_4thEditor Win64 Development` with UE 5.7 `Build.bat`
+- Result: succeeded
+
+#### Follow-up
+
+- In Unreal Editor, create `BP_JunRingHost`, add `JunRingComponent`, place it in a test map, and run the checklist in `Source/JunDocs/Guides/JunUnrealSetupChecklist.md`
+- Next coding pass should focus on GameState-facing minimal Ring snapshot if UI or multiplayer HUD binding needs it
+
+### 2026-04-28 Ring Shrink Smoke Test Fix
+
+#### Goal
+
+- Fix the case where debug draw appears but the Ring does not shrink during the standalone smoke test
+
+#### Cause
+
+- The checklist told the user to lower `InitialRadius` to `3000`, but built-in default phase targets were authored for `InitialRadius=10000` (`8000`, `4000`, `1500`)
+- This could make validation reject the phase data because target radius was larger than the current radius
+- The previous built-in first wait time was also 30 seconds, which was too slow for a smoke test
+
+#### Changes
+
+- Built-in Ring phases now scale down automatically when no DataTable is assigned and `InitialRadius` is lower than the authored default
+- Built-in no-DataTable phase timings are now smoke-test friendly: first shrink starts after 3 seconds
+- Existing Blueprint instances with older built-in no-DataTable phase timings are clamped to smoke-test-friendly values at runtime
+- Added `StartRing`, `BeginPhase`, `StartShrink`, and `CompletePhase` logs
+- Updated `JunUnrealSetupChecklist.md` to mention the 3-second wait and Output Log checks
+
+#### Validation
+
+- Built `WP_4thEditor Win64 Development` with UE 5.7 `Build.bat`
+- Result: succeeded
+
+#### Follow-up
+
+- Re-run the `BP_JunRingHost + JunRingComponent` standalone test
+- If the sphere still does not shrink, check Output Log for `JunRingComponent: StartRing`, `BeginPhase`, and `StartShrink`
+
+### 2026-04-28 AGENTS Merge Into JunDocs
+
+#### Goal
+
+- Remove the separate root-level agent guideline document from the Jun workflow
+- Keep the same engineering rules inside Jun-owned documentation
+
+#### Changes
+
+- Merged the `AGENTS.md` working mode, Ring architecture rules, data rules, deliverables, milestone reporting, and validation policy into `Source/JunDocs/Overview/JunEngineeringHarness.md`
+- Added a short pointer in `Source/JunDocs/JunReadme.md` that Codex/AI rules are managed through JunDocs
+- Removed the standalone root `AGENTS.md`
+
+#### Validation
+
+- Confirmed the JunDocs entry point and engineering harness now contain the relevant AGENTS rules

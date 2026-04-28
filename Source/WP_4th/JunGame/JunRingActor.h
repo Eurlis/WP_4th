@@ -18,8 +18,32 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Ring")
 	void StartRing();
 
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void StopRing();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void PauseRing();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void ResumeRing();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void ResetRing();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	void ResetForRound();
+
+	UFUNCTION(BlueprintCallable, Category = "Ring")
+	bool AdvanceToPhase(int32 PhaseIndex);
+
+	UFUNCTION(BlueprintCallable, Category = "Ring|Balance")
+	bool ReloadRingData();
+
 	UFUNCTION(BlueprintPure, Category = "Ring")
 	float GetCurrentRadius() const;
+
+	UFUNCTION(BlueprintPure, Category = "Ring")
+	float GetTargetRadius() const;
 
 	UFUNCTION(BlueprintPure, Category = "Ring")
 	int32 GetCurrentPhaseIndex() const;
@@ -31,7 +55,16 @@ public:
 	bool IsRingShrinking() const;
 
 	UFUNCTION(BlueprintPure, Category = "Ring")
+	bool IsRingPaused() const;
+
+	UFUNCTION(BlueprintPure, Category = "Ring")
+	bool IsRingActive() const;
+
+	UFUNCTION(BlueprintPure, Category = "Ring")
 	FVector GetRingCenter() const;
+
+	UFUNCTION(BlueprintPure, Category = "Ring")
+	FVector GetTargetRingCenter() const;
 
 	UFUNCTION(BlueprintPure, Category = "Ring")
 	EJunRingPhaseState GetRingPhaseState() const;

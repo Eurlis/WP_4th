@@ -14,12 +14,15 @@
 
 ### 자기장
 
+- `Actor` 기반 `BP_JunRingHost`에 `JunRingComponent`만 붙여도 Ring이 자동 시작되는지
 - 매치 시작 후 링이 시작되는지
 - 페이즈가 순서대로 진행되는지
 - 반지름이 목표값까지 줄어드는지
 - 링 밖에서 데미지가 틱 단위로 들어오는지
 - CSV 변경 후 리임포트하면 수치가 바뀌는지
 - 같은 `JunRingComponent`를 다른 링 호스트 액터에 붙여도 동일하게 동작 가능한지
+- `PauseRing`, `ResumeRing`, `StopRing`, `ResetRing`이 서버에서만 상태를 바꾸는지
+- 잘못된 DataTable 값이 들어오면 로그에 읽을 수 있는 에러가 남는지
 
 ### 데스매치
 

@@ -1,60 +1,71 @@
-# Jun Unreal Setup Checklist
+# Jun Ring Unreal Setup Checklist
 
-아래 체크리스트는 Jun 코드가 추가된 뒤, 사용자가 Unreal Editor에서 직접 확인하거나 세팅해야 하는 항목들이다.
+이 체크리스트의 1차 목표는 데스매치 모드 완성 여부와 무관하게, 아무 테스트 맵/모드에서 `JunRingComponent`를 붙이면 Ring이 서버에서 시작되고 줄어드는지 확인하는 것이다.
 
-## 컴파일 전
+## A. 컴파일 전 확인
 
-1. 솔루션 탐색기에서 `Source/WP_4th/JunGame` 폴더 아래 새 클래스들이 보이는지 확인
-2. `JunDeathmatchGameMode`, `JunDeathmatchGameState`, `JunDeathmatchPlayerState`, `JunRingActor`, `JunRingComponent`가 모두 생성됐는지 확인
-3. 에디터를 열기 전에 C++ 프로젝트 컴파일
+1. 솔루션 탐색기에서 `Source/WP_4th/JunGame` 폴더가 보이는지 확인
+2. `JunRingComponent`, `JunRingActor`, `JunRingDamageType`, `JunBalanceData`가 보이는지 확인
+3. C++ 프로젝트를 컴파일
+4. 컴파일 실패 시 에러 메시지의 첫 번째 C++ 에러부터 확인
 
-## DataTable 준비
+## B. 가장 빠른 Ring 단독 테스트
 
-4. `Source/JunDocs/Data/JunRingBalanceSample.csv`를 참고해서 링 밸런스 CSV 작성
-5. `Source/JunDocs/Data/JunDeathmatchSettingsSample.csv`를 참고해서 데스매치 설정 CSV 작성
-6. 링 CSV를 `FJunRingPhaseRow` 타입의 DataTable로 임포트
-7. 데스매치 CSV를 `FJunDeathmatchSettingsRow` 타입의 DataTable로 임포트
-8. 임포트 후 각 열이 의도한 타입으로 들어갔는지 확인
-9. 링 DataTable에서 페이즈 순서가 `PhaseIndex` 기준으로 맞는지 확인
-10. 데스매치 DataTable에서 행 이름이 `Default`인지 확인
+5. 테스트 맵을 하나 연다
+6. `Actor` 기반 블루프린트 `BP_JunRingHost`를 만든다
+7. `BP_JunRingHost`에 `JunRingComponent`를 추가한다
+8. `JunRingComponent`에서 `bStartAutomatically`가 켜져 있는지 확인한다
+9. `bEnableDebugDraw`가 켜져 있는지 확인한다
+10. `InitialRadius`를 테스트하기 쉽게 `3000` 정도로 낮춘다
+11. `RingPhases` 배열을 DataTable 없이 기본값 그대로 둔다
+12. DataTable 없는 기본 phase는 단독 테스트용으로 3초 대기 후 축소가 시작된다
+13. `InitialRadius`를 낮추면 기본 phase target radius도 비율에 맞게 자동 조정된다
+14. `BP_JunRingHost`를 맵 중앙에 배치한다
+15. PIE 1인 플레이를 실행한다
+16. 시안색 debug sphere가 보이는지 확인한다
+17. 3초 정도 기다린 뒤 반지름이 줄어드는지 확인한다
+18. Output Log에서 `JunRingComponent: StartRing`, `BeginPhase`, `StartShrink` 로그가 나오는지 확인한다
+19. 플레이어가 Ring 밖에 있으면 데미지를 받는지 확인한다
 
-## 블루프린트 세팅
+## C. CSV / DataTable 테스트
 
-11. `AJunRingActor` 기반 블루프린트 생성
-12. 링 블루프린트 안의 `JunRingComponent`를 선택
-13. `JunRingComponent`의 `RingPhaseDataTable` 연결
-14. 필요하면 `JunRingComponent`의 `InitialRadius` 기본값 조정
-15. 필요하면 `JunRingComponent`의 `bEnableDebugDraw`를 켜서 테스트용 시각화 활성화
-16. `AJunDeathmatchGameMode` 기반 블루프린트 생성
-17. 생성한 게임모드 블루프린트에 `DeathmatchSettingsDataTable` 연결
-18. `DeathmatchSettingsRowName`이 실제 행 이름과 일치하는지 확인
-19. 게임모드 블루프린트에 링 블루프린트 클래스를 `RingActorClass`로 연결
-20. 필요한 기본 Pawn 클래스와 PlayerController 클래스를 게임모드에서 지정
+20. `Source/JunDocs/Data/JunRingBalanceSample.csv`를 참고해 CSV를 준비한다
+21. Unreal Editor에서 CSV를 `FJunRingPhaseRow` DataTable로 임포트한다
+22. `BP_JunRingHost`의 `JunRingComponent.RingPhaseDataTable`에 연결한다
+23. PIE를 다시 실행해 CSV 값대로 대기 시간, 축소 시간, 데미지가 바뀌는지 확인한다
+24. CSV를 수정한 경우 Editor에서 DataTable을 리임포트한 뒤 다시 PIE를 실행한다
 
-## 맵 세팅
+## D. 아무 GameMode에서 붙이는 경로
 
-21. 테스트용 맵에 `PlayerStart`를 최소 2개 이상 배치
-22. 멀티플레이 테스트용이면 스폰 위치가 서로 겹치지 않게 조정
-23. World Settings에서 기본 GameMode를 `BP_JunDeathmatchGameMode`로 설정
-24. Maps & Modes 프로젝트 설정에서도 기본 게임모드를 확인
+25. 기존 테스트용 GameMode 블루프린트를 하나 연다
+26. 빠른 서버 단독 확인이면 GameMode 블루프린트에 `JunRingComponent`를 직접 추가한다
+27. `bUseOwnerLocationAsCenter`가 켜져 있으면 GameMode 위치 기준이므로, 필요하면 끄고 `RingCenter`를 직접 지정한다
+28. 멀티플레이에서 클라이언트 시각화까지 확인하려면 `BP_JunRingHost` 또는 `AJunRingActor`를 맵에 배치하거나 GameMode가 spawn하게 한다
+29. GameMode가 직접 Ring을 제어해야 할 때만 `AJunRingActor`를 spawn하거나 `UJunRingComponent`를 가진 host actor를 참조한다
+30. 이 방식이면 Deathmatch, Team Elimination, 임시 테스트 모드 모두 같은 Ring host를 재사용할 수 있다
 
-## 링/데스매치 테스트
+## E. Jun Deathmatch 연동 테스트
 
-25. PIE 1인 플레이로 링이 자동 시작하는지 확인
-26. 시간이 지나면 링 반지름이 줄어드는지 확인
-27. 링 바깥에 나가면 일정 간격으로 데미지를 받는지 확인
-28. 사망 후 리스폰이 되는지 확인
-29. 데스매치 킬 목표치가 DataTable 값대로 반영되는지 확인
-30. `JunDeathmatchPlayerState`의 킬/데스/리스폰 수가 갱신되는지 확인
-31. 멀티플레이 PIE에서 링 상태와 리스폰이 모든 클라이언트에 일관되게 보이는지 확인
+31. `AJunDeathmatchGameMode` 기반 블루프린트를 만든다
+32. `AJunRingActor` 기반 블루프린트를 만들고 `RingPhaseDataTable`을 연결한다
+33. GameMode 블루프린트의 `RingActorClass`에 Ring actor 블루프린트를 연결한다
+34. `bStartRingOnBeginPlay`가 켜져 있는지 확인한다
+35. World Settings에서 GameMode를 Jun Deathmatch GameMode 블루프린트로 지정한다
+36. PIE에서 match start 후 Ring이 시작되는지 확인한다
+37. `JunDeathmatchGameState`의 Ring 복제값이 갱신되는지 확인한다
 
-## 후속 연동
+## F. 멀티플레이 확인
 
-32. 무기 담당자에게 `RegisterKill(AController* KillerController, AController* VictimController)` 호출 지점을 전달
-33. 캐릭터 담당자와 리스폰 직후 상태 초기화 필요 여부를 협의
-34. HUD 담당이 생기면 `JunDeathmatchGameState` 값을 바인딩 대상으로 전달
-35. 다른 모드에서 재사용하려면 `JunRingComponent`를 가진 새 링 호스트 액터 또는 모드 전용 링 액터를 생성
-## UE 5.7 API Re-check
+38. PIE 인원 수를 2 이상으로 설정한다
+39. Listen Server + Client에서 Ring 반지름과 phase가 일관되게 보이는지 확인한다
+40. 클라이언트가 Ring 밖에 있을 때 서버 기준으로 데미지가 들어가는지 확인한다
+41. 데미지 결과가 클라이언트에서 임의로 계산되지 않는지 확인한다
 
-4. When touching gameplay traversal or world queries, re-check that the code uses UE 5.7-safe APIs rather than legacy iterator patterns.
-5. Reject code that introduces `FConstPawnIterator`, `GetPawnIterator()`, or similar outdated UE4-style traversal unless there is a documented engine requirement.
+## G. 현재 구현 기준
+
+- `JunRingComponent`는 기본적으로 자동 시작된다
+- DataTable이 없어도 기본 3개 phase로 동작한다
+- DataTable이 있으면 `PhaseIndex` 순서로 정렬하고 검증한다
+- 기존 CSV 필드 `WaitTime`, `ShrinkTime`, `DamageInterval`, `DamagePerTick`도 지원한다
+- 새 CSV 필드 `DelayBeforeShrink`, `ShrinkDuration`, `DamageTickInterval`, `DamagePerSecond`도 지원한다
+- `StopRing`, `PauseRing`, `ResumeRing`, `ResetRing`, `ResetForRound`, `AdvanceToPhase`, `ReloadRingData`를 Blueprint에서 호출할 수 있다
