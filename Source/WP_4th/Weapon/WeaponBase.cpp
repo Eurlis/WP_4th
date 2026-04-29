@@ -182,6 +182,9 @@ void AWeaponBase::ApplyWeaponData(const FWeaponData& Data)
 		WeaponMesh3P->SetRelativeRotation(Data.MeshRotation);
 		WeaponMesh3P->SetRelativeLocation(Data.MeshLocationOffset);
 	}
+
+	OnWeaponEquipped.Broadcast(Data.WeaponIcon, Data.AmmoIcon, Data.MaxAmmo);
+	OnAmmoChanged.Broadcast(CurrentAmmo, Data.MaxAmmo);
 }
 
 void AWeaponBase::OnRep_WeaponID()
@@ -400,6 +403,8 @@ void AWeaponBase::ServerFire_Implementation(FVector MuzzleLocation, FVector AimD
 
 	UE_LOG(LogTemp, Warning, TEXT("[Ammo] Current: %d/%d"), CurrentAmmo, MaxAmmo);
 
+	OnAmmoChanged.Broadcast(CurrentAmmo, CurrentWeaponData.MaxAmmo);
+
 	ProcessHit(MuzzleLocation, AimDirection);
 
 	// 자동 재장전 체크
@@ -505,6 +510,8 @@ void AWeaponBase::FireBurstShot()
 
 	UE_LOG(LogTemp, Log, TEXT("[Burst] Shot %d/%d fired, Ammo:%d/%d"),
 		CurrentBurstCount, MaxBurst, CurrentAmmo, MaxAmmo);
+
+	OnAmmoChanged.Broadcast(CurrentAmmo, CurrentWeaponData.MaxAmmo);
 
 	ProcessHit(MuzzleLoc, AimDir);
 
@@ -772,6 +779,8 @@ void AWeaponBase::FinishReload()
 	bIsReloading = false;
 
 	UE_LOG(LogTemp, Warning, TEXT("[Reload] Finished - Ammo: %d/%d"), CurrentAmmo, MaxAmmo);
+
+	OnAmmoChanged.Broadcast(CurrentAmmo, CurrentWeaponData.MaxAmmo);
 }
 
 // ==================== Equip ====================
@@ -782,6 +791,9 @@ void AWeaponBase::OnEquipped()
 	WeaponMesh3P->SetVisibility(true);
 
 	MulticastPlayEquipSound();
+
+	OnWeaponEquipped.Broadcast(CurrentWeaponData.WeaponIcon, CurrentWeaponData.AmmoIcon, CurrentWeaponData.MaxAmmo);
+	OnAmmoChanged.Broadcast(CurrentAmmo, CurrentWeaponData.MaxAmmo);
 }
 
 void AWeaponBase::OnUnequipped()
@@ -933,5 +945,5 @@ void AWeaponBase::RecoverRecoil(float DeltaTime)
 
 void AWeaponBase::OnRep_CurrentAmmo()
 {
-	// UI update hook — 블루프린트에서 바인딩 가능
+	OnAmmoChanged.Broadcast(CurrentAmmo, CurrentWeaponData.MaxAmmo);
 }
