@@ -392,6 +392,12 @@ void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
 	LastWeaponID = WeaponID;
 
 	UE_LOG(LogTemp, Warning, TEXT("[TestChar] Weapon switched to: %s"), *WeaponID.ToString());
+
+	// HUD 위젯 등 BP 측 갱신
+	if (CurrentWeapon)
+	{
+		BP_OnWeaponEquipped(CurrentWeapon);
+	}
 }
 
 void AWeaponTestCharacter::ServerApplyDamage(float Damage, ACharacter* DamageInstigator, FHitResult HitResult)

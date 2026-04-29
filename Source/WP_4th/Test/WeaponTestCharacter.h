@@ -48,6 +48,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	AWeaponBase* CurrentWeapon;
 
+	/** BP에서 HUD 갱신 등에 사용하는 무기 장착 이벤트 (CurrentWeapon이 set된 후 호출) */
+	UFUNCTION(BlueprintImplementableEvent, Category = "Weapon|Events", meta = (DisplayName = "On Weapon Equipped"))
+	void BP_OnWeaponEquipped(AWeaponBase* NewWeapon);
+
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	EEquippedSlot CurrentSlot = EEquippedSlot::Weapon;
 
