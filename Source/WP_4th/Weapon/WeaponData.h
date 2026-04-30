@@ -46,7 +46,7 @@ struct FWeaponData : public FTableRowBase
 
 	/** CSV 주도 무기 카테고리 (Rifle / Pistol / Shotgun / Sniper / Throwable) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Info")
-	FString Category;
+	EWeaponType Category = EWeaponType::Rifle;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Info")
 	UTexture2D* WeaponIcon = nullptr;

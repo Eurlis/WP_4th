@@ -27,7 +27,7 @@ AWraith::AWraith()
 	//FirstPersonCameraComponent TransForm
 	/*FirstPersonCameraComponent->SetRelativeLocationAndRotation(FVector(12.520892,3.034245,-0.000011), FRotator(-20.000000,50.000000,-110.000000));
 	FirstPersonCameraComponent->SetRelativeScale3D(FVector(1.000000,1.000000,1.000000));
-	*/
+	*/ 
 	
 	//Mesh TransForm
 	GetMesh()->SetRelativeLocationAndRotation(FVector(0.000000,0.000000,-100.000000), FRotator(0.000000,-90.000000,0.000000));
@@ -47,7 +47,7 @@ AWraith::AWraith()
 void AWraith::BeginPlay()
 {
 	Super::BeginPlay();
-	EquipWeapon("Wingman");
+	EquipWeapon("R301");
 }
 
 // Called every frame
