@@ -148,6 +148,7 @@ void AWeaponBase::InitFromDataTable(FName InWeaponID)
 
 void AWeaponBase::ApplyWeaponData(const FWeaponData& Data)
 {
+	Category = Data.Category;
 	BaseDamage = Data.BaseDamage;
 	HeadshotMultiplier = Data.HeadshotMultiplier;
 	LegMultiplier = Data.LegMultiplier;

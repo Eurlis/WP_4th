@@ -6,6 +6,7 @@
 #include "Animation/AnimInstance.h"
 #include "Character/ApexCharacterBase.h"
 #include "KismetAnimationLibrary.h"
+#include "WeaponTypes.h"
 #include "WraithAnimInstance.generated.h"
 
 class AWraith;
@@ -52,7 +53,9 @@ public:
 	FVector LeftHandLocation;
 	UPROPERTY(BlueprintReadOnly, Category = "IK")
 	FVector RightHandLocation;
-
+	
+	UPROPERTY(BlueprintReadOnly, Category = "WeaponType")
+	EWeaponType WeaponType;
 private:
 	UPROPERTY()
 	TObjectPtr<AWraith> OwnerCharacter;

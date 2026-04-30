@@ -23,3 +23,15 @@ enum class EAmmoType : uint8
 	Energy		UMETA(DisplayName = "Energy"),
 	Sniper		UMETA(DisplayName = "Sniper")
 };
+
+UENUM(BlueprintType)
+enum class EWeaponType : uint8
+{
+	None        UMETA(DisplayName = "Unarmed"),
+	Rifle       UMETA(DisplayName = "Rifle"),
+	Pistol      UMETA(DisplayName = "Pistol"),
+	Shotgun     UMETA(DisplayName = "Shotgun"),
+	Sniper      UMETA(DisplayName = "Sniper"),
+	Throwable   UMETA(DisplayName = "Throwable")
+
+};
