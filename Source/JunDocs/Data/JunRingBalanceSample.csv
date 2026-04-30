@@ -1,0 +1,6 @@
+Name,PhaseIndex,Radius,TargetRadius,WaitTime,DelayBeforeShrink,ShrinkTime,ShrinkDuration,DamageInterval,DamageTickInterval,DamagePerTick,DamagePerSecond,CenterMode,FixedCenter,WarningLeadTime,bUseStepDamageInterval,Notes
+Phase01,0,10000,8000,30,-1,20,-1,1.0,-1,2,-1,KeepCurrent,"(X=0,Y=0,Z=0)",5,true,"Default opening ring"
+Phase02,1,0,5000,25,-1,18,-1,1.0,-1,4,-1,KeepCurrent,"(X=0,Y=0,Z=0)",5,true,"Mid ring"
+Phase03,2,0,2500,20,-1,15,-1,0.75,-1,6,-1,KeepCurrent,"(X=0,Y=0,Z=0)",4,true,"Late ring"
+Phase04,3,0,1000,15,-1,12,-1,0.5,-1,8,-1,KeepCurrent,"(X=0,Y=0,Z=0)",3,true,"Final pressure"
+Phase05,4,0,400,10,-1,8,-1,0.35,-1,12,-1,KeepCurrent,"(X=0,Y=0,Z=0)",2,true,"Last ring"
