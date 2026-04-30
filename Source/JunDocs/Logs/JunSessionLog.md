@@ -207,3 +207,30 @@
 #### Validation
 
 - Confirmed the JunDocs entry point and engineering harness now contain the relevant AGENTS rules
+
+### 2026-04-30 Ring Client Sync Fix
+
+#### Goal
+
+- Fix the issue where the Ring shrinks on the server but the client debug Ring does not shrink or sync to the server radius
+
+#### Cause
+
+- A generic `BP_JunRingHost` actor may not have replication enabled, which prevents `UJunRingComponent` replicated fields from reaching clients
+- Clients were drawing the last replicated `CurrentRadius` only and were not locally interpolating from replicated shrink timing
+
+#### Changes
+
+- `UJunRingComponent` enables replication on its owner at runtime when running with authority
+- Replicated `PhaseStartRadius`, `PhaseTargetRadius`, `ShrinkStartTime`, `ShrinkEndTime`, and `PhaseStateEndTime`
+- Clients now run the same visual radius interpolation path while damage remains server-only
+- Phase transitions call `ForceNetUpdate()` so clients receive transition snapshots promptly
+- Ring time now uses `GameState->GetServerWorldTimeSeconds()` when available
+- Updated the checklist to require `BP_JunRingHost` Class Defaults `Replicates` for multiplayer checks
+
+#### Validation
+
+- Built `WP_4thEditor Win64 Development` with UE 5.7 `Build.bat`
+- Initial build exposed a UE 5.7 deprecation warning for direct `NetUpdateFrequency` access
+- Replaced it with `SetNetUpdateFrequency/GetNetUpdateFrequency`
+- Final build result: succeeded

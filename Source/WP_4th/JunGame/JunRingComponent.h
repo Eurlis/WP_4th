@@ -169,6 +169,7 @@ private:
 	float GetPhaseShrinkTime(const FJunRingPhaseRow& Phase) const;
 	float GetPhaseDamageInterval(const FJunRingPhaseRow& Phase) const;
 	float GetPhaseDamageAmount(const FJunRingPhaseRow& Phase) const;
+	float GetRingWorldTime() const;
 
 	UFUNCTION()
 	void OnRep_CurrentRadius();
@@ -177,12 +178,21 @@ private:
 	FTimerHandle PhaseEndTimerHandle;
 	FTimerHandle DamageTickTimerHandle;
 
+	UPROPERTY(Replicated)
 	float PhaseStartRadius;
+
 	UPROPERTY(Replicated)
 	float PhaseTargetRadius;
+
+	UPROPERTY(Replicated)
 	float ShrinkStartTime;
+
+	UPROPERTY(Replicated)
 	float ShrinkEndTime;
+
+	UPROPERTY(Replicated)
 	float PhaseStateEndTime;
+
 	float PausedPhaseTimeRemaining;
 	float PausedShrinkTimeRemaining;
 };

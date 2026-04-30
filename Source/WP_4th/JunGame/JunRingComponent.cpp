@@ -4,6 +4,7 @@
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/GameStateBase.h"
 #include "GameFramework/Pawn.h"
 #include "JunGame/JunRingDamageType.h"
 #include "Kismet/GameplayStatics.h"
@@ -72,6 +73,16 @@ void UJunRingComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (AActor* Owner = GetOwner())
+	{
+		if (Owner->HasAuthority() && !Owner->GetIsReplicated())
+		{
+			Owner->SetReplicates(true);
+			Owner->SetNetUpdateFrequency(FMath::Max(Owner->GetNetUpdateFrequency(), 15.f));
+			UE_LOG(LogTemp, Log, TEXT("JunRingComponent: enabled replication on owner %s for client ring sync."), *GetNameSafe(Owner));
+		}
+	}
+
 	CurrentRadius = InitialRadius;
 	PhaseStartRadius = InitialRadius;
 	PhaseTargetRadius = InitialRadius;
@@ -97,7 +108,7 @@ void UJunRingComponent::TickComponent(float DeltaTime, enum ELevelTick TickType,
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!GetOwner() || !GetOwner()->HasAuthority() || !bRingStarted || !bIsShrinking)
+	if (!GetOwner() || !bRingStarted || !bIsShrinking)
 	{
 		if (bEnableDebugDraw && GetWorld())
 		{
@@ -126,7 +137,11 @@ void UJunRingComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(UJunRingComponent, PhaseState);
 	DOREPLIFETIME(UJunRingComponent, RingCenter);
 	DOREPLIFETIME(UJunRingComponent, TargetRingCenter);
+	DOREPLIFETIME(UJunRingComponent, PhaseStartRadius);
 	DOREPLIFETIME(UJunRingComponent, PhaseTargetRadius);
+	DOREPLIFETIME(UJunRingComponent, ShrinkStartTime);
+	DOREPLIFETIME(UJunRingComponent, ShrinkEndTime);
+	DOREPLIFETIME(UJunRingComponent, PhaseStateEndTime);
 }
 
 void UJunRingComponent::StartRing()
@@ -212,7 +227,7 @@ void UJunRingComponent::PauseRing()
 	}
 
 	UpdateCurrentRadiusFromShrinkTime();
-	const float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	const float CurrentTime = GetRingWorldTime();
 	PausedPhaseTimeRemaining = FMath::Max(0.f, PhaseStateEndTime - CurrentTime);
 	PausedShrinkTimeRemaining = FMath::Max(0.f, ShrinkEndTime - CurrentTime);
 	ClearRingTimers();
@@ -235,7 +250,7 @@ void UJunRingComponent::ResumeRing()
 		PhaseState = EJunRingPhaseState::Shrinking;
 		bIsShrinking = true;
 		PhaseStartRadius = CurrentRadius;
-		ShrinkStartTime = GetWorld()->GetTimeSeconds();
+		ShrinkStartTime = GetRingWorldTime();
 		ShrinkEndTime = ShrinkStartTime + PausedShrinkTimeRemaining;
 		PhaseStateEndTime = ShrinkEndTime;
 		GetWorld()->GetTimerManager().SetTimer(PhaseEndTimerHandle, this, &UJunRingComponent::CompletePhase, PausedShrinkTimeRemaining, false);
@@ -244,7 +259,7 @@ void UJunRingComponent::ResumeRing()
 	{
 		PhaseState = EJunRingPhaseState::Waiting;
 		bIsShrinking = false;
-		PhaseStateEndTime = GetWorld()->GetTimeSeconds() + PausedPhaseTimeRemaining;
+		PhaseStateEndTime = GetRingWorldTime() + PausedPhaseTimeRemaining;
 		GetWorld()->GetTimerManager().SetTimer(PhaseStartTimerHandle, this, &UJunRingComponent::StartShrinkForCurrentPhase, PausedPhaseTimeRemaining, false);
 	}
 
@@ -329,7 +344,7 @@ float UJunRingComponent::GetPhaseTimeRemaining() const
 
 	if (const UWorld* World = GetWorld())
 	{
-		return FMath::Max(0.f, PhaseStateEndTime - World->GetTimeSeconds());
+		return FMath::Max(0.f, PhaseStateEndTime - GetRingWorldTime());
 	}
 
 	return 0.f;
@@ -484,7 +499,7 @@ void UJunRingComponent::BeginPhase(int32 PhaseIndex)
 	PhaseStartRadius = CurrentRadius;
 	PhaseTargetRadius = Phase.TargetRadius;
 	const float WaitTime = GetPhaseWaitTime(Phase);
-	PhaseStateEndTime = GetWorld()->GetTimeSeconds() + WaitTime;
+	PhaseStateEndTime = GetRingWorldTime() + WaitTime;
 	UE_LOG(LogTemp, Log, TEXT("JunRingComponent: BeginPhase %d. CurrentRadius=%.2f TargetRadius=%.2f Wait=%.2f Shrink=%.2f Owner=%s"),
 		CurrentPhaseIndex,
 		CurrentRadius,
@@ -492,6 +507,7 @@ void UJunRingComponent::BeginPhase(int32 PhaseIndex)
 		WaitTime,
 		GetPhaseShrinkTime(Phase),
 		*GetNameSafe(GetOwner()));
+	GetOwner()->ForceNetUpdate();
 
 	GetWorld()->GetTimerManager().SetTimer(
 		DamageTickTimerHandle,
@@ -526,7 +542,7 @@ void UJunRingComponent::StartShrinkForCurrentPhase()
 
 	PhaseStartRadius = CurrentRadius;
 	PhaseTargetRadius = Phase.TargetRadius;
-	ShrinkStartTime = GetWorld()->GetTimeSeconds();
+	ShrinkStartTime = GetRingWorldTime();
 	const float ShrinkTime = GetPhaseShrinkTime(Phase);
 	ShrinkEndTime = ShrinkStartTime + ShrinkTime;
 	PhaseStateEndTime = ShrinkEndTime;
@@ -538,6 +554,7 @@ void UJunRingComponent::StartShrinkForCurrentPhase()
 		PhaseTargetRadius,
 		ShrinkTime,
 		*GetNameSafe(GetOwner()));
+	GetOwner()->ForceNetUpdate();
 
 	if (ShrinkTime <= 0.f)
 	{
@@ -568,6 +585,7 @@ void UJunRingComponent::CompletePhase()
 		CurrentPhaseIndex,
 		CurrentRadius,
 		*GetNameSafe(GetOwner()));
+	GetOwner()->ForceNetUpdate();
 
 	const int32 NextPhaseIndex = CurrentPhaseIndex + 1;
 	if (RingPhases.IsValidIndex(NextPhaseIndex))
@@ -651,7 +669,7 @@ void UJunRingComponent::UpdateCurrentRadiusFromShrinkTime()
 		return;
 	}
 
-	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float CurrentTime = GetRingWorldTime();
 	const float Alpha = FMath::Clamp((CurrentTime - ShrinkStartTime) / (ShrinkEndTime - ShrinkStartTime), 0.f, 1.f);
 	CurrentRadius = FMath::Lerp(PhaseStartRadius, PhaseTargetRadius, Alpha);
 }
@@ -679,6 +697,21 @@ float UJunRingComponent::GetPhaseDamageAmount(const FJunRingPhaseRow& Phase) con
 	}
 
 	return Phase.DamagePerTick;
+}
+
+float UJunRingComponent::GetRingWorldTime() const
+{
+	if (!GetWorld())
+	{
+		return 0.f;
+	}
+
+	if (const AGameStateBase* GameState = GetWorld()->GetGameState())
+	{
+		return GameState->GetServerWorldTimeSeconds();
+	}
+
+	return GetWorld()->GetTimeSeconds();
 }
 
 bool UJunRingComponent::IsOutsideRing(const FVector& TargetLocation) const
