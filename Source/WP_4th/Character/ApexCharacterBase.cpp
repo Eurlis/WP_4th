@@ -70,22 +70,24 @@ AApexCharacterBase::AApexCharacterBase()
 	DefaultMaxWalkSpeedCrouched = MovementComponent->MaxWalkSpeedCrouched;
 
 	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
+	ZiplineComp = CreateDefaultSubobject<UZiplineRiderComponent>(TEXT("ZiplineComp"));
+
 
 	//Weapon Setting
 	ConstructorHelpers::FClassFinder<AWeaponBase> BP_Generic (TEXT("/Game/OJJ/BP/BP_Weapon_Generic.BP_Weapon_Generic_C"));
 	if (BP_Generic.Succeeded()) GenericWeaponClass = BP_Generic.Class;
-	//Input Setting 
+	//Input Setting
 	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Jump(TEXT("/Game/Input/Actions/IA_Jump.IA_Jump"));
 	if (IA_Jump.Succeeded()) JumpAction = IA_Jump.Object;
-	
+
 	// MoveAction
 	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Move(TEXT("/Game/Input/Actions/IA_Move.IA_Move"));
 	if (IA_Move.Succeeded()) MoveAction = IA_Move.Object;
-	
+
 	// LookAction
 	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Look(TEXT("/Game/Input/Actions/IA_Look.IA_Look"));
 	if (IA_Look.Succeeded()) LookAction = IA_Look.Object;
-	
+
 	// MouseLookAction
 	static ConstructorHelpers::FObjectFinder<UInputAction> IA_MouseLook(TEXT("/Game/Input/Actions/IA_MouseLook.IA_MouseLook"));
 	if (IA_MouseLook.Succeeded()) MouseLookAction = IA_MouseLook.Object;
@@ -116,7 +118,7 @@ AApexCharacterBase::AApexCharacterBase()
 
 void AApexCharacterBase::EquipWeapon(FName WeaponID)
 {
-	
+
 	if (WeaponID.IsNone() || !GenericWeaponClass) return;
 
 	if (CurrentWeapon)
@@ -234,6 +236,10 @@ void AApexCharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		if (AimAction)
 		{
 			EIC->BindAction(AimAction, ETriggerEvent::Started, this, &AApexCharacterBase::OnAimStarted);
+		}
+		if (InteractAction)
+		{
+			EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AApexCharacterBase::OnInteract);
 		}
 		/*if (SwitchARAction)
 		{
@@ -684,6 +690,11 @@ void AApexCharacterBase::HandleDeath()
 	{
 		Multicast_OnDeath();
 	}
+}
+
+void AApexCharacterBase::OnInteract()
+{
+	if (ZiplineComp) ZiplineComp->TryInterract();
 }
 
 

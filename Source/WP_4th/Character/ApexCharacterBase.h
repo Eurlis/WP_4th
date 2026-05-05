@@ -5,6 +5,7 @@
 #include "InputActionValue.h"
 #include "Components/PakourComp/PakousComponent.h"
 #include "MotionWarping/Public/MotionWarping.h"
+#include "Character/Components/ZiplineComp/ZiplineRiderComponent.h"
 #include "ApexCharacterBase.generated.h"
 
 class UHealthComponent;
@@ -42,7 +43,7 @@ protected:
 
 public:
 	AApexCharacterBase();
-	
+
 	void EquipWeapon(FName WeaponID);
 	// ─── Components ───────────────────────────────────────────────
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
@@ -125,7 +126,7 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* SlideAction;
-	
+
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* FireAction;
 
@@ -143,9 +144,12 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* SwitchGrenadeAction;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
+
+	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* AimAction;
+
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* InteractAction;
 
 	// ─── ADS ──────────────────────────────────────────────────────
 	UPROPERTY(EditAnywhere, Category = "ADS")
@@ -257,18 +261,24 @@ private:
 	float DefaultMaxWalkSpeedCrouched;
 	float SavedDefaultWalkSpeed = 0.f;
 
-	
-	
+
+
 	// ─── Death ────────────────────────────────────────────────────
 	UFUNCTION()
 	void HandleDeath();
 
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_OnDeath();
-	
+
 	// MontionWarping
 public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="Components")
 	UMotionWarpingComponent* MotionWarpingComp;
-	
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,Category="Components")
+	UZiplineRiderComponent* ZiplineComp;
+
+	UFUNCTION()
+	void OnInteract();
+
 };

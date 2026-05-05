@@ -21,10 +21,11 @@ public class WP_4th : ModuleRules
 			"Slate",
 			"MotionWarping",
 			"Niagara",
-			"NiagaraCore"
+			"NiagaraCore",
+            "CableComponent"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "AnimGraphRuntime" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "AnimGraphRuntime", "CableComponent", "CableComponent" });
 
 		PublicIncludePaths.AddRange(new string[] {
 			"WP_4th",
@@ -33,7 +34,10 @@ public class WP_4th : ModuleRules
 			"WP_4th/Variant_Shooter/UI",
 			"WP_4th/Variant_Shooter/Weapons",
 			"WP_4th/Weapon",
-			"WP_4th/Test"
+			"WP_4th/Test",
+            "WP_4th/Zipline",
+            "WP_4th/Character/Components/ZiplineComp"
+
 		});
 
 		// Uncomment if you are using Slate UI
