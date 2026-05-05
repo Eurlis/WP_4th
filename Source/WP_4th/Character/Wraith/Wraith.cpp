@@ -19,28 +19,27 @@ AWraith::AWraith()
 		FirstPersonMesh->SetSkeletalMesh(WraithMesh.Object);
 		GetMesh()->SetSkeletalMesh(WraithMesh.Object);
 	}
-	
+
 	// Transfrom 설정.. 터지지마세요.. FirstPersonMesh
 	FirstPersonMesh->SetWorldLocationAndRotation(FVector(0.000000,0.000000,0.000000),FRotator(0.000000,0.000000,0.000000));
 	FirstPersonMesh->SetRelativeScale3D(FVector(1.000000,1.000000,1.000000));
-	
+
 	//FirstPersonCameraComponent TransForm
 	/*FirstPersonCameraComponent->SetRelativeLocationAndRotation(FVector(12.520892,3.034245,-0.000011), FRotator(-20.000000,50.000000,-110.000000));
 	FirstPersonCameraComponent->SetRelativeScale3D(FVector(1.000000,1.000000,1.000000));
-	*/ 
-	
+	*/
+
 	//Mesh TransForm
 	GetMesh()->SetRelativeLocationAndRotation(FVector(0.000000,0.000000,-100.000000), FRotator(0.000000,-90.000000,0.000000));
 	GetMesh()->SetRelativeScale3D(FVector(1.000000,1.000000,1.000000));
 	GetCapsuleComponent()->SetRelativeScale3D(FVector(1.f));
-	
-	// ABP는 GetMesh()(3인칭)에만 설정 — 같은 ABP를 두 컴포넌트에 동시 할당 시 AnimPreviewInstance assertion 발생
+
 	ConstructorHelpers::FClassFinder<UAnimInstance> ABP_Wraith(TEXT("/Game/BluePrints/ABP/ABP_Wraith.ABP_Wraith_C"));
 	if (ABP_Wraith.Succeeded())
 	{
 		GetMesh()->SetAnimInstanceClass(ABP_Wraith.Class);
 	}
-	
+
 }
 
 // Called when the game starts or when spawned
