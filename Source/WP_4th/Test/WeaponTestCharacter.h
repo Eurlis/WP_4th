@@ -20,6 +20,7 @@ class USplineMeshComponent;
 class UDecalComponent;
 class UStaticMesh;
 class UMaterialInterface;
+class UInteractionComponent;
 
 
 
@@ -83,6 +84,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
 	int32 GrenadeCount = 2;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapons")
+	int32 MaxGrenadeCount = 3;
+
 	// ========== Input Actions ==========
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputMappingContext* DefaultMappingContext;
@@ -122,6 +126,22 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* AimAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* InteractAction;
+
+	// === Interaction ===
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UInteractionComponent* InteractionComp;
+
+	UFUNCTION(Server, Reliable)
+	void ServerInteract(AActor* TargetInteractable);
+
+public:
+	void SwitchWeaponByID(FName WeaponID);
+
+	UFUNCTION(BlueprintCallable, Category = "Pickup")
+	void AddGrenade(FName GrenadeID);
 
 	// ========== ADS / Camera ==========
 	UPROPERTY(EditAnywhere, Category = "Camera")
@@ -178,7 +198,6 @@ protected:
 	void StartFire();
 	void StopFire();
 	void Reload();
-	void SwitchWeaponByID(FName WeaponID);
 	void SwitchToAR();
 	void SwitchToPistol();
 	void SwitchToShotgun();
@@ -188,6 +207,7 @@ protected:
 	void LookUp(const FInputActionValue& Value);
 	void OnAimStarted();
 	void OnAimStopped();
+	void OnInteractInput(const FInputActionValue& Value);
 
 	// === WP4-37/38 ===
 	void StartThrowableAim();

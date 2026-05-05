@@ -14,6 +14,8 @@
 #include "WeaponData.h"
 #include "ThrowableBase.h"
 #include "TrajectoryHelper.h"
+#include "Character/Components/InteractionComponent.h"
+#include "Interaction/InteractableInterface.h"
 
 AWeaponTestCharacter::AWeaponTestCharacter()
 {
@@ -45,6 +47,8 @@ AWeaponTestCharacter::AWeaponTestCharacter()
 	TargetMarkerDecal->DecalSize = FVector(50.f, 50.f, 50.f);
 
 	CurrentWeapon = nullptr;
+
+	InteractionComp = CreateDefaultSubobject<UInteractionComponent>(TEXT("InteractionComp"));
 }
 
 void AWeaponTestCharacter::BeginPlay()
@@ -163,6 +167,56 @@ void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 		EnhancedInput->BindAction(AimAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::OnAimStarted);
 		EnhancedInput->BindAction(AimAction, ETriggerEvent::Completed, this, &AWeaponTestCharacter::OnAimStopped);
 		EnhancedInput->BindAction(AimAction, ETriggerEvent::Canceled, this, &AWeaponTestCharacter::OnAimStopped);
+	}
+	if (InteractAction)
+	{
+		EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::OnInteractInput);
+	}
+}
+
+void AWeaponTestCharacter::OnInteractInput(const FInputActionValue& Value)
+{
+	if (!InteractionComp || !InteractionComp->CurrentInteractable)
+	{
+		return;
+	}
+
+	AActor* Target = InteractionComp->CurrentInteractable;
+	IInteractableInterface* Iface = Cast<IInteractableInterface>(Target);
+	if (!Iface || !Iface->CanInteract(this))
+	{
+		return;
+	}
+
+	if (HasAuthority())
+	{
+		Iface->OnInteract(this);
+	}
+	else
+	{
+		ServerInteract(Target);
+	}
+}
+
+void AWeaponTestCharacter::ServerInteract_Implementation(AActor* TargetInteractable)
+{
+	if (!TargetInteractable)
+	{
+		return;
+	}
+
+	// 보안: 클라이언트가 보낸 타깃 액터의 거리 재검증 (조작 방지)
+	const float MaxAllowedDist = 500.f;
+	if (GetDistanceTo(TargetInteractable) > MaxAllowedDist)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Interact] Target too far: %.1f"), GetDistanceTo(TargetInteractable));
+		return;
+	}
+
+	IInteractableInterface* Iface = Cast<IInteractableInterface>(TargetInteractable);
+	if (Iface && Iface->CanInteract(this))
+	{
+		Iface->OnInteract(this);
 	}
 }
 
@@ -398,6 +452,27 @@ void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
 	{
 		BP_OnWeaponEquipped(CurrentWeapon);
 	}
+}
+
+void AWeaponTestCharacter::AddGrenade(FName GrenadeID)
+{
+	if (!HasAuthority()) return;
+
+	if (GrenadeID.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Grenade] AddGrenade: invalid ID"));
+		return;
+	}
+
+	if (GrenadeWeaponID != GrenadeID)
+	{
+		GrenadeWeaponID = GrenadeID;
+	}
+
+	GrenadeCount = FMath::Min(GrenadeCount + 1, MaxGrenadeCount);
+
+	UE_LOG(LogTemp, Log, TEXT("[Grenade] AddGrenade: %s, count = %d/%d"),
+		*GrenadeID.ToString(), GrenadeCount, MaxGrenadeCount);
 }
 
 void AWeaponTestCharacter::ServerApplyDamage(float Damage, ACharacter* DamageInstigator, FHitResult HitResult)
