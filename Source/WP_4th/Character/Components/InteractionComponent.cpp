@@ -4,6 +4,7 @@
 #include "GameFramework/Controller.h"
 #include "Interaction/InteractableInterface.h"
 #include "Engine/World.h"
+#include "DrawDebugHelpers.h"
 
 UInteractionComponent::UInteractionComponent()
 {
@@ -86,6 +87,34 @@ void UInteractionComponent::PerformTrace()
 	const bool bHit = World->LineTraceSingleByChannel(Hit, ViewLoc, TraceEnd, TraceChannel, Params);
 
 	AActor* HitActor = bHit ? Hit.GetActor() : nullptr;
+
+#if !UE_BUILD_SHIPPING
+	// ===== DEBUG START (Editor/Dev only) =====
+	const FColor LineColor = bHit ? FColor::Green : FColor::Red;
+	DrawDebugLine(World, ViewLoc, TraceEnd, LineColor, false, 0.2f, 0, 2.0f);
+
+	if (HitActor)
+	{
+		DrawDebugSphere(World, Hit.ImpactPoint, 15.0f, 12, FColor::Yellow, false, 0.2f);
+
+		const bool bImplements = HitActor->Implements<UInteractableInterface>();
+		IInteractableInterface* Iface = Cast<IInteractableInterface>(HitActor);
+		const bool bCastOK = (Iface != nullptr);
+
+		UE_LOG(LogTemp, Verbose, TEXT("[InteractTrace] Hit Actor: %s | Class: %s | Dist: %.1f | Implements<UInteractableInterface>: %s | Cast<IInteractableInterface>: %s"),
+			*HitActor->GetName(),
+			*HitActor->GetClass()->GetName(),
+			Hit.Distance,
+			bImplements ? TEXT("TRUE") : TEXT("FALSE"),
+			bCastOK ? TEXT("TRUE") : TEXT("FALSE"));
+	}
+	else if (bHit)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[InteractTrace] Hit but no Actor (component-only hit?)"));
+	}
+	// ===== DEBUG END =====
+#endif
+
 	if (HitActor && HitActor->Implements<UInteractableInterface>())
 	{
 		SetCurrentInteractable(HitActor);

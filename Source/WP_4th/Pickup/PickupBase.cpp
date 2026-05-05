@@ -3,7 +3,10 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
+#include "Engine/DataTable.h"
 #include "Test/WeaponTestCharacter.h"
+#include "Weapon/WeaponData.h"
+#include "Weapon/WeaponTypes.h"
 
 APickupBase::APickupBase()
 {
@@ -29,6 +32,73 @@ APickupBase::APickupBase()
 	PickupSkeletalMesh->SetupAttachment(InteractionSphere);
 	PickupSkeletalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	PickupSkeletalMesh->SetCollisionProfileName(TEXT("NoCollision"));
+}
+
+void APickupBase::BeginPlay()
+{
+	Super::BeginPlay();
+	RefreshFromDataTable();
+}
+
+void APickupBase::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	RefreshFromDataTable();
+}
+
+void APickupBase::RefreshFromDataTable()
+{
+	if (!WeaponDataTable || PickupWeaponID.IsNone())
+	{
+		return;
+	}
+
+	const FWeaponData* Data = WeaponDataTable->FindRow<FWeaponData>(
+		PickupWeaponID, TEXT("PickupBase::RefreshFromDataTable"));
+	if (!Data)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PickupBase] DT row not found: %s"),
+			*PickupWeaponID.ToString());
+		return;
+	}
+
+	const bool bIsThrowable = (Data->Category == EWeaponType::Throwable);
+	PickupKind = bIsThrowable ? EPickupKind::Throwable : EPickupKind::Weapon;
+
+	if (bIsThrowable)
+	{
+		if (PickupMesh)
+		{
+			PickupMesh->SetStaticMesh(Data->ThrowableMesh);
+			PickupMesh->SetRelativeScale3D(Data->ThrowableMeshScale);
+			PickupMesh->SetRelativeRotation(Data->ThrowableMeshRotation);
+			PickupMesh->SetVisibility(Data->ThrowableMesh != nullptr);
+		}
+		if (PickupSkeletalMesh)
+		{
+			PickupSkeletalMesh->SetSkeletalMesh(nullptr);
+			PickupSkeletalMesh->SetVisibility(false);
+		}
+	}
+	else
+	{
+		if (PickupSkeletalMesh)
+		{
+			PickupSkeletalMesh->SetSkeletalMesh(Data->WeaponMesh3P);
+			PickupSkeletalMesh->SetRelativeScale3D(Data->MeshScale);
+			PickupSkeletalMesh->SetRelativeRotation(Data->MeshRotation);
+			PickupSkeletalMesh->SetRelativeLocation(Data->MeshLocationOffset);
+			PickupSkeletalMesh->SetVisibility(Data->WeaponMesh3P != nullptr);
+		}
+		if (PickupMesh)
+		{
+			PickupMesh->SetStaticMesh(nullptr);
+			PickupMesh->SetVisibility(false);
+		}
+	}
+
+	UE_LOG(LogTemp, Verbose, TEXT("[PickupBase] Refreshed: %s, Kind: %d"),
+		*PickupWeaponID.ToString(), (int32)PickupKind);
 }
 
 void APickupBase::OnInteract(ACharacter* Interactor)
@@ -75,5 +145,20 @@ FString APickupBase::GetInteractionPrompt() const
 
 bool APickupBase::CanInteract(ACharacter* Interactor) const
 {
-	return Interactor != nullptr && !PickupWeaponID.IsNone();
+	if (!Interactor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CanInteract] FAIL: Interactor NULL on %s"), *GetName());
+		return false;
+	}
+
+	if (PickupWeaponID.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CanInteract] FAIL: PickupWeaponID is None on %s (Kind: %d) — check BP default value"),
+			*GetName(), (int32)PickupKind);
+		return false;
+	}
+
+	UE_LOG(LogTemp, Verbose, TEXT("[CanInteract] PASS: %s, Kind: %d, ID: %s"),
+		*GetName(), (int32)PickupKind, *PickupWeaponID.ToString());
+	return true;
 }

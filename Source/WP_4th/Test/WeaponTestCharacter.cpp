@@ -113,8 +113,14 @@ void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+	UE_LOG(LogTemp, Warning, TEXT("[Init] SetupPlayerInputComponent called"));
+
 	UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(PlayerInputComponent);
-	if (!EnhancedInput) return;
+	if (!EnhancedInput)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Init] EnhancedInputComponent CAST FAILED"));
+		return;
+	}
 
 	if (MoveAction)
 	{
@@ -171,29 +177,54 @@ void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	if (InteractAction)
 	{
 		EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::OnInteractInput);
+		UE_LOG(LogTemp, Warning, TEXT("[Init] InteractAction BOUND successfully"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Init] InteractAction is NULL - check BP assignment"));
 	}
 }
 
 void AWeaponTestCharacter::OnInteractInput(const FInputActionValue& Value)
 {
-	if (!InteractionComp || !InteractionComp->CurrentInteractable)
+	UE_LOG(LogTemp, Verbose, TEXT("[Interact] OnInteractInput called! HasAuthority: %d"), HasAuthority());
+
+	if (!InteractionComp)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Interact] InteractionComp NULL"));
 		return;
 	}
 
+	if (!InteractionComp->CurrentInteractable)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[Interact] CurrentInteractable NULL"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Verbose, TEXT("[Interact] Target: %s"),
+		*InteractionComp->CurrentInteractable->GetName());
+
 	AActor* Target = InteractionComp->CurrentInteractable;
 	IInteractableInterface* Iface = Cast<IInteractableInterface>(Target);
-	if (!Iface || !Iface->CanInteract(this))
+	if (!Iface)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[Interact] Cast<IInteractableInterface> FAILED on %s"), *Target->GetName());
+		return;
+	}
+	if (!Iface->CanInteract(this))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Interact] CanInteract returned FALSE on %s"), *Target->GetName());
 		return;
 	}
 
 	if (HasAuthority())
 	{
+		UE_LOG(LogTemp, Verbose, TEXT("[Interact] Calling OnInteract directly (server)"));
 		Iface->OnInteract(this);
 	}
 	else
 	{
+		UE_LOG(LogTemp, Verbose, TEXT("[Interact] Calling ServerInteract RPC (client)"));
 		ServerInteract(Target);
 	}
 }
