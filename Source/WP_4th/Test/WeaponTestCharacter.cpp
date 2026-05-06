@@ -16,6 +16,7 @@
 #include "TrajectoryHelper.h"
 #include "Interaction/InteractionComponent.h"
 #include "Interaction/InteractableInterface.h"
+#include "Net/UnrealNetwork.h"
 
 AWeaponTestCharacter::AWeaponTestCharacter()
 {
@@ -49,6 +50,9 @@ AWeaponTestCharacter::AWeaponTestCharacter()
 	CurrentWeapon = nullptr;
 
 	InteractionComp = CreateDefaultSubobject<UInteractionComponent>(TEXT("InteractionComp"));
+
+	bReplicates = true;
+	SetReplicateMovement(true);
 }
 
 void AWeaponTestCharacter::BeginPlay()
@@ -662,4 +666,115 @@ void AWeaponTestCharacter::UpdateThrowableAimPreview()
 		TargetMarkerDecal->SetWorldLocationAndRotation(LandingPoint, LandingNormal.Rotation());
 		TargetMarkerDecal->SetVisibility(bBlockingHit);
 	}
+}
+
+// ==================== Replication ====================
+void AWeaponTestCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, LightAmmo,   COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, HeavyAmmo,   COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, EnergyAmmo,  COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ShotgunAmmo, COND_OwnerOnly);
+}
+
+// ==================== Ammo Pool ====================
+int32 AWeaponTestCharacter::GetMaxAmmoForType(EAmmoType Type) const
+{
+	switch (Type)
+	{
+	case EAmmoType::Light:   return MaxLightAmmo;
+	case EAmmoType::Heavy:   return MaxHeavyAmmo;
+	case EAmmoType::Energy:  return MaxEnergyAmmo;
+	case EAmmoType::Shotgun: return MaxShotgunAmmo;
+	case EAmmoType::Sniper:  return MaxHeavyAmmo;  // Sniper은 Heavy 풀로 통합
+	default:                 return 0;
+	}
+}
+
+int32 AWeaponTestCharacter::GetAmmoForType(EAmmoType Type) const
+{
+	switch (Type)
+	{
+	case EAmmoType::Light:   return LightAmmo;
+	case EAmmoType::Heavy:   return HeavyAmmo;
+	case EAmmoType::Energy:  return EnergyAmmo;
+	case EAmmoType::Shotgun: return ShotgunAmmo;
+	case EAmmoType::Sniper:  return HeavyAmmo;  // Sniper → Heavy 통합
+	default:                 return 0;
+	}
+}
+
+void AWeaponTestCharacter::SetAmmoForType(EAmmoType Type, int32 NewAmount)
+{
+	switch (Type)
+	{
+	case EAmmoType::Light:   LightAmmo   = NewAmount; break;
+	case EAmmoType::Heavy:   HeavyAmmo   = NewAmount; break;
+	case EAmmoType::Energy:  EnergyAmmo  = NewAmount; break;
+	case EAmmoType::Shotgun: ShotgunAmmo = NewAmount; break;
+	case EAmmoType::Sniper:  HeavyAmmo   = NewAmount; break;  // Sniper → Heavy 통합
+	default: break;
+	}
+}
+
+int32 AWeaponTestCharacter::GetReserveAmmo(EAmmoType Type) const
+{
+	return GetAmmoForType(Type);
+}
+
+int32 AWeaponTestCharacter::AddAmmo(EAmmoType Type, int32 Count)
+{
+	if (Count <= 0) return 0;
+
+	if (!HasAuthority())
+	{
+		// 클라에서 호출 시 RPC만 보내고 0 반환 (실제 추가량은 서버 결과)
+		ServerAddAmmo(Type, Count);
+		return 0;
+	}
+
+	const int32 Current = GetAmmoForType(Type);
+	const int32 Max = GetMaxAmmoForType(Type);
+	const int32 Added = FMath::Clamp(Max - Current, 0, Count);
+	if (Added <= 0) return 0;
+
+	const int32 NewAmount = Current + Added;
+	SetAmmoForType(Type, NewAmount);
+
+	UE_LOG(LogTemp, Log, TEXT("[Ammo] AddAmmo %s: +%d (Total: %d / %d)"),
+		*UEnum::GetValueAsString(Type), Added, NewAmount, Max);
+
+	OnReserveAmmoChanged.Broadcast(Type, NewAmount);
+	return Added;
+}
+
+int32 AWeaponTestCharacter::ConsumeReserve(EAmmoType Type, int32 Needed)
+{
+	if (Needed <= 0) return 0;
+
+	if (!HasAuthority())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Ammo] ConsumeReserve called on client - ignored"));
+		return 0;
+	}
+
+	const int32 Current = GetAmmoForType(Type);
+	if (Current <= 0) return 0;
+
+	const int32 Consumed = FMath::Min(Needed, Current);
+	const int32 NewAmount = Current - Consumed;
+	SetAmmoForType(Type, NewAmount);
+
+	UE_LOG(LogTemp, Log, TEXT("[Ammo] ConsumeReserve %s: -%d (Remaining: %d)"),
+		*UEnum::GetValueAsString(Type), Consumed, NewAmount);
+
+	OnReserveAmmoChanged.Broadcast(Type, NewAmount);
+	return Consumed;
+}
+
+void AWeaponTestCharacter::ServerAddAmmo_Implementation(EAmmoType Type, int32 Count)
+{
+	AddAmmo(Type, Count);
 }

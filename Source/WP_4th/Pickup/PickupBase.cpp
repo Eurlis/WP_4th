@@ -7,6 +7,7 @@
 #include "Test/WeaponTestCharacter.h"
 #include "Weapon/WeaponData.h"
 #include "Weapon/WeaponTypes.h"
+#include "Interaction/AmmoReserveOwnerInterface.h"
 
 APickupBase::APickupBase()
 {
@@ -62,11 +63,10 @@ void APickupBase::RefreshFromDataTable()
 		return;
 	}
 
-	const bool bIsThrowable = (Data->Category == EWeaponType::Throwable);
-	PickupKind = bIsThrowable ? EPickupKind::Throwable : EPickupKind::Weapon;
-
-	if (bIsThrowable)
+	switch (Data->Category)
 	{
+	case EWeaponType::Throwable:
+		PickupKind = EPickupKind::Throwable;
 		if (PickupMesh)
 		{
 			PickupMesh->SetStaticMesh(Data->ThrowableMesh);
@@ -79,9 +79,26 @@ void APickupBase::RefreshFromDataTable()
 			PickupSkeletalMesh->SetSkeletalMesh(nullptr);
 			PickupSkeletalMesh->SetVisibility(false);
 		}
-	}
-	else
-	{
+		break;
+
+	case EWeaponType::Ammo:
+		PickupKind = EPickupKind::Ammo;
+		if (PickupMesh)
+		{
+			PickupMesh->SetStaticMesh(Data->PickupStaticMesh);
+			PickupMesh->SetRelativeScale3D(FVector(1.f));
+			PickupMesh->SetRelativeRotation(FRotator::ZeroRotator);
+			PickupMesh->SetVisibility(Data->PickupStaticMesh != nullptr);
+		}
+		if (PickupSkeletalMesh)
+		{
+			PickupSkeletalMesh->SetSkeletalMesh(nullptr);
+			PickupSkeletalMesh->SetVisibility(false);
+		}
+		break;
+
+	default:
+		PickupKind = EPickupKind::Weapon;
 		if (PickupSkeletalMesh)
 		{
 			PickupSkeletalMesh->SetSkeletalMesh(Data->WeaponMesh3P);
@@ -95,6 +112,7 @@ void APickupBase::RefreshFromDataTable()
 			PickupMesh->SetStaticMesh(nullptr);
 			PickupMesh->SetVisibility(false);
 		}
+		break;
 	}
 
 	UE_LOG(LogTemp, Verbose, TEXT("[PickupBase] Refreshed: %s, Kind: %d"),
@@ -121,21 +139,59 @@ void APickupBase::OnInteract(ACharacter* Interactor)
 		return;
 	}
 
+	bool bConsumed = false;
+
 	switch (PickupKind)
 	{
 	case EPickupKind::Weapon:
 		TestChar->SwitchWeaponByID(PickupWeaponID);
+		bConsumed = true;
 		break;
+
 	case EPickupKind::Throwable:
 		TestChar->AddGrenade(PickupWeaponID);
+		bConsumed = true;
 		break;
+
 	case EPickupKind::Ammo:
-		// TODO Phase 2: AddAmmo 구현
-		UE_LOG(LogTemp, Warning, TEXT("[Pickup] Ammo pickup not yet implemented"));
-		return;
+	{
+		const FWeaponData* Data = WeaponDataTable
+			? WeaponDataTable->FindRow<FWeaponData>(PickupWeaponID, TEXT("PickupBase::OnInteract"))
+			: nullptr;
+		if (!Data)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Pickup] Ammo DT row missing: %s"),
+				*PickupWeaponID.ToString());
+			return;
+		}
+
+		IAmmoReserveOwnerInterface* AmmoOwner = Cast<IAmmoReserveOwnerInterface>(Interactor);
+		if (!AmmoOwner)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Pickup] Interactor doesn't implement IAmmoReserveOwnerInterface"));
+			return;
+		}
+
+		const int32 Added = AmmoOwner->AddAmmo(Data->AmmoType, Data->PickupAmmoCount);
+		if (Added > 0)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[Pickup] Ammo +%d %s"),
+				Added, *UEnum::GetValueAsString(Data->AmmoType));
+			bConsumed = true;
+		}
+		else
+		{
+			// Apex 동작: Reserve가 가득이면 픽업 그대로 둠
+			UE_LOG(LogTemp, Log, TEXT("[Pickup] Ammo full, pickup not consumed"));
+		}
+		break;
+	}
 	}
 
-	Destroy();
+	if (bConsumed)
+	{
+		Destroy();
+	}
 }
 
 FString APickupBase::GetInteractionPrompt() const
@@ -158,7 +214,16 @@ FText APickupBase::GetInteractionPromptText() const
 		return FText::FromName(PickupWeaponID);
 	}
 
-	const FString Combined = FString::Printf(TEXT("%s 줍기"), *Data->DisplayName.ToString());
+	FString Combined;
+	if (PickupKind == EPickupKind::Ammo)
+	{
+		Combined = FString::Printf(TEXT("%s +%d 줍기"),
+			*Data->DisplayName.ToString(), Data->PickupAmmoCount);
+	}
+	else
+	{
+		Combined = FString::Printf(TEXT("%s 줍기"), *Data->DisplayName.ToString());
+	}
 	return FText::FromString(Combined);
 }
 

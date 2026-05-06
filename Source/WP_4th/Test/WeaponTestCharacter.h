@@ -7,6 +7,8 @@
 #include "InputActionValue.h"
 #include "Character/ApexCharacterBase.h"
 #include "Kismet/GameplayStatics.h"
+#include "Weapon/WeaponTypes.h"
+#include "Interaction/AmmoReserveOwnerInterface.h"
 #include "WeaponTestCharacter.generated.h"
 
 class UCameraComponent;
@@ -24,8 +26,10 @@ class UInteractionComponent;
 
 
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnReserveAmmoChangedSignature, EAmmoType, Type, int32, NewAmount);
+
 UCLASS()
-class WP_4TH_API AWeaponTestCharacter : public ACharacter
+class WP_4TH_API AWeaponTestCharacter : public ACharacter, public IAmmoReserveOwnerInterface
 {
 	GENERATED_BODY()
 
@@ -37,6 +41,7 @@ protected:
 
 public:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// ========== Components ==========
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
@@ -142,6 +147,50 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Pickup")
 	void AddGrenade(FName GrenadeID);
+
+	// ========== Ammo Pool (4 종 개별 — TMap 복제 미지원 회피) ==========
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 LightAmmo = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 HeavyAmmo = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 EnergyAmmo = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 ShotgunAmmo = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxLightAmmo = 240;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxHeavyAmmo = 240;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxEnergyAmmo = 240;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxShotgunAmmo = 64;
+
+	UPROPERTY(BlueprintAssignable, Category = "Ammo|Events")
+	FOnReserveAmmoChangedSignature OnReserveAmmoChanged;
+
+	UFUNCTION(BlueprintPure, Category = "Ammo")
+	int32 GetMaxAmmoForType(EAmmoType Type) const;
+
+	UFUNCTION(BlueprintPure, Category = "Ammo")
+	int32 GetAmmoForType(EAmmoType Type) const;
+
+	void SetAmmoForType(EAmmoType Type, int32 NewAmount);
+
+	// IAmmoReserveOwnerInterface
+	virtual int32 GetReserveAmmo(EAmmoType Type) const override;
+	virtual int32 AddAmmo(EAmmoType Type, int32 Count) override;
+	virtual int32 ConsumeReserve(EAmmoType Type, int32 Needed) override;
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Ammo")
+	void ServerAddAmmo(EAmmoType Type, int32 Count);
 
 	// ========== ADS / Camera ==========
 	UPROPERTY(EditAnywhere, Category = "Camera")

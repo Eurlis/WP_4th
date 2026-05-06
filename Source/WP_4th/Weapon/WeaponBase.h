@@ -10,6 +10,7 @@
 class ABulletPoolManager;
 class UDataTable;
 class UTexture2D;
+class IAmmoReserveOwnerInterface;
 
 // 탄약 변경 알림 (CurrentAmmo, MaxAmmo)
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAmmoChangedSignature, int32, NewCurrentAmmo, int32, NewMaxAmmo);
@@ -198,6 +199,10 @@ public:
 
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerStartReload();
+
+	/** 오너의 ReserveAmmo (이 무기 탄종) 조회. 인터페이스 미구현 오너면 -1 = unlimited */
+	UFUNCTION(BlueprintPure, Category = "Weapon|Ammo")
+	int32 GetOwnerReserveAmmo() const;
 
 	// ========== Equip ==========
 	UFUNCTION(BlueprintCallable, Category = "Weapon")

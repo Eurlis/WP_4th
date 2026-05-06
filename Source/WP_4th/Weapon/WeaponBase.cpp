@@ -12,6 +12,7 @@
 #include "NiagaraSystem.h"
 #include "BulletPoolManager.h"
 #include "ProjectileBase.h"
+#include "Interaction/AmmoReserveOwnerInterface.h"
 
 AWeaponBase::AWeaponBase()
 {
@@ -751,9 +752,28 @@ void AWeaponBase::ApplyDamage(const FHitResult& HitResult, float Damage)
 
 // ==================== Reload ====================
 
+int32 AWeaponBase::GetOwnerReserveAmmo() const
+{
+	if (IAmmoReserveOwnerInterface* Reserve = Cast<IAmmoReserveOwnerInterface>(GetOwner()))
+	{
+		return Reserve->GetReserveAmmo(AmmoType);
+	}
+	return -1;  // 인터페이스 미구현 = unlimited (AI/봇/타팀원 캐릭터 호환용)
+}
+
 void AWeaponBase::StartReload()
 {
 	if (bIsReloading || CurrentAmmo >= MaxAmmo) return;
+
+	// 오너가 Reserve 시스템을 가지면 Reserve 0일 때 차단
+	const int32 Reserve = GetOwnerReserveAmmo();
+	if (Reserve == 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Reload] Blocked - no reserve ammo (%s)"),
+			*UEnum::GetValueAsString(AmmoType));
+		return;
+	}
+
 	ServerStartReload();
 }
 
@@ -766,6 +786,9 @@ void AWeaponBase::ServerStartReload_Implementation()
 {
 	if (bIsReloading || CurrentAmmo >= MaxAmmo) return;
 
+	const int32 Reserve = GetOwnerReserveAmmo();
+	if (Reserve == 0) return;
+
 	bIsReloading = true;
 	StopFire();
 
@@ -776,8 +799,23 @@ void AWeaponBase::ServerStartReload_Implementation()
 
 void AWeaponBase::FinishReload()
 {
-	CurrentAmmo = MaxAmmo;
 	bIsReloading = false;
+
+	const int32 Needed = MaxAmmo - CurrentAmmo;
+	if (Needed > 0)
+	{
+		if (IAmmoReserveOwnerInterface* Reserve = Cast<IAmmoReserveOwnerInterface>(GetOwner()))
+		{
+			// Apex 방식: Reserve에서 필요한 만큼만 차감
+			const int32 Refilled = Reserve->ConsumeReserve(AmmoType, Needed);
+			CurrentAmmo += Refilled;
+		}
+		else
+		{
+			// Fallback: 인터페이스 미구현 오너는 무한 탄약 (기존 동작)
+			CurrentAmmo = MaxAmmo;
+		}
+	}
 
 	UE_LOG(LogTemp, Warning, TEXT("[Reload] Finished - Ammo: %d/%d"), CurrentAmmo, MaxAmmo);
 

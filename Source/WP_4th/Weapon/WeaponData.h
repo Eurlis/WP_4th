@@ -44,9 +44,18 @@ struct FWeaponData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Info")
 	FName DisplayName;
 
-	/** CSV 주도 무기 카테고리 (Rifle / Pistol / Shotgun / Sniper / Throwable) */
+	/** CSV 주도 무기 카테고리 (Rifle / Pistol / Shotgun / Sniper / Throwable / Ammo) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Info")
 	EWeaponType Category = EWeaponType::Rifle;
+
+	// ===== 픽업 (Ammo 카테고리 전용) =====
+	/** Ammo 픽업 시 사용할 Static 메시 (탄창 모델) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickup")
+	UStaticMesh* PickupStaticMesh = nullptr;
+
+	/** Ammo 픽업 시 지급되는 탄약 수 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Pickup")
+	int32 PickupAmmoCount = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Info")
 	UTexture2D* WeaponIcon = nullptr;
