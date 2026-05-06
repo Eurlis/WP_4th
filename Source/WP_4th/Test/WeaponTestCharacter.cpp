@@ -14,7 +14,7 @@
 #include "WeaponData.h"
 #include "ThrowableBase.h"
 #include "TrajectoryHelper.h"
-#include "Character/Components/InteractionComponent.h"
+#include "Interaction/InteractionComponent.h"
 #include "Interaction/InteractableInterface.h"
 
 AWeaponTestCharacter::AWeaponTestCharacter()

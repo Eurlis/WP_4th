@@ -55,6 +55,7 @@ public:
 	// === IInteractableInterface ===
 	virtual void OnInteract(ACharacter* Interactor) override;
 	virtual FString GetInteractionPrompt() const override;
+	virtual FText GetInteractionPromptText() const override;
 	virtual bool CanInteract(ACharacter* Interactor) const override;
 
 protected:

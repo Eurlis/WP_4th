@@ -21,6 +21,9 @@ public:
 	// HUD에 표시할 prompt 텍스트
 	virtual FString GetInteractionPrompt() const { return TEXT("Interact"); }
 
+	// HUD에 표시할 prompt 텍스트 (위젯 바인딩용 FText 버전)
+	virtual FText GetInteractionPromptText() const { return NSLOCTEXT("Interaction", "DefaultPrompt", "Interact"); }
+
 	// 상호작용 가능 여부 (필요 시 거리/상태 검증)
 	virtual bool CanInteract(class ACharacter* Interactor) const { return true; }
 };

@@ -143,6 +143,25 @@ FString APickupBase::GetInteractionPrompt() const
 	return FString::Printf(TEXT("Pickup [%s]"), *PickupWeaponID.ToString());
 }
 
+FText APickupBase::GetInteractionPromptText() const
+{
+	if (PickupWeaponID.IsNone() || !WeaponDataTable)
+	{
+		return NSLOCTEXT("Interaction", "DefaultPickup", "줍기");
+	}
+
+	const FWeaponData* Data = WeaponDataTable->FindRow<FWeaponData>(
+		PickupWeaponID, TEXT("PickupBase::GetInteractionPromptText"));
+
+	if (!Data)
+	{
+		return FText::FromName(PickupWeaponID);
+	}
+
+	const FString Combined = FString::Printf(TEXT("%s 줍기"), *Data->DisplayName.ToString());
+	return FText::FromString(Combined);
+}
+
 bool APickupBase::CanInteract(ACharacter* Interactor) const
 {
 	if (!Interactor)

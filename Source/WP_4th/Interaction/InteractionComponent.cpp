@@ -139,15 +139,18 @@ void UInteractionComponent::SetCurrentInteractable(AActor* NewInteractable)
 		if (IInteractableInterface* Iface = Cast<IInteractableInterface>(NewInteractable))
 		{
 			CurrentPrompt = Iface->GetInteractionPrompt();
+			CurrentPromptText = Iface->GetInteractionPromptText();
 		}
 		else
 		{
 			CurrentPrompt.Empty();
+			CurrentPromptText = FText::GetEmpty();
 		}
 	}
 	else
 	{
 		CurrentPrompt.Empty();
+		CurrentPromptText = FText::GetEmpty();
 	}
 
 	OnInteractableChanged.Broadcast(NewInteractable);

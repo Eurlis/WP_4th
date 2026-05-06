@@ -31,6 +31,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
 	FString CurrentPrompt;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+	FText CurrentPromptText;
+
 	UPROPERTY(BlueprintAssignable, Category = "Interaction")
 	FOnInteractableChanged OnInteractableChanged;
 
