@@ -90,12 +90,12 @@ void UInteractionComponent::PerformTrace()
 
 #if !UE_BUILD_SHIPPING
 	// ===== DEBUG START (Editor/Dev only) =====
-	const FColor LineColor = bHit ? FColor::Green : FColor::Red;
-	DrawDebugLine(World, ViewLoc, TraceEnd, LineColor, false, 0.2f, 0, 2.0f);
+	// const FColor LineColor = bHit ? FColor::Green : FColor::Red;
+	// DrawDebugLine(World, ViewLoc, TraceEnd, LineColor, false, 0.2f, 0, 2.0f);
 
 	if (HitActor)
 	{
-		DrawDebugSphere(World, Hit.ImpactPoint, 15.0f, 12, FColor::Yellow, false, 0.2f);
+		// DrawDebugSphere(World, Hit.ImpactPoint, 15.0f, 12, FColor::Yellow, false, 0.2f);
 
 		const bool bImplements = HitActor->Implements<UInteractableInterface>();
 		IInteractableInterface* Iface = Cast<IInteractableInterface>(HitActor);

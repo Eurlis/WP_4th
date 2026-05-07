@@ -63,17 +63,19 @@ void AFireZone::InitializeFireZone(float InDuration, float InTickInterval,
 
 	if (GetWorld())
 	{
-		DrawDebugBox(
-			GetWorld(),
-			GetActorLocation(),
-			BoxExtent,
-			GetActorQuat(),
-			FColor::Red,
-			false,
-			Duration,
-			0,
-			5.0f
-		);
+#if WITH_EDITOR
+		// DrawDebugBox(
+		// 	GetWorld(),
+		// 	GetActorLocation(),
+		// 	BoxExtent,
+		// 	GetActorQuat(),
+		// 	FColor::Red,
+		// 	false,
+		// 	Duration,
+		// 	0,
+		// 	5.0f
+		// );
+#endif
 	}
 
 	GetWorld()->GetTimerManager().SetTimer(

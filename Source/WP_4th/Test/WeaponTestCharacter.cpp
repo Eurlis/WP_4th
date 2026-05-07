@@ -39,6 +39,9 @@ AWeaponTestCharacter::AWeaponTestCharacter()
 	TrajectorySpline = CreateDefaultSubobject<USplineComponent>(TEXT("TrajectorySpline"));
 	TrajectorySpline->SetupAttachment(GetCapsuleComponent());
 	TrajectorySpline->SetMobility(EComponentMobility::Movable);
+	TrajectorySpline->SetUsingAbsoluteLocation(true);
+	TrajectorySpline->SetUsingAbsoluteRotation(true);
+	TrajectorySpline->SetUsingAbsoluteScale(true);
 	TrajectorySpline->ClearSplinePoints(false);
 
 	// === WP4-38: 착탄 마커 ===
