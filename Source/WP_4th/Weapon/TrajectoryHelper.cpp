@@ -54,12 +54,25 @@ namespace TrajectoryHelper
 
 			if (i < RequiredMeshes)
 			{
+				// 안전 마진: 머티리얼이 누락/변경된 경우에만 재적용
+				if (Material && MeshComp->GetMaterial(0) != Material)
+				{
+					MeshComp->SetMaterial(0, Material);
+				}
+
 				const FVector StartPos = Spline->GetLocationAtSplinePoint(i, ESplineCoordinateSpace::World);
 				const FVector StartTan = Spline->GetTangentAtSplinePoint(i, ESplineCoordinateSpace::World);
 				const FVector EndPos   = Spline->GetLocationAtSplinePoint(i + 1, ESplineCoordinateSpace::World);
 				const FVector EndTan   = Spline->GetTangentAtSplinePoint(i + 1, ESplineCoordinateSpace::World);
 
-				MeshComp->SetStartAndEnd(StartPos, StartTan, EndPos, EndTan, true);
+				// World → SplineMesh Local 변환 (SetStartAndEnd는 Local 좌표 기대)
+				const FTransform MeshXform = MeshComp->GetComponentTransform();
+				const FVector LocalStart    = MeshXform.InverseTransformPosition(StartPos);
+				const FVector LocalStartTan = MeshXform.InverseTransformVector(StartTan);
+				const FVector LocalEnd      = MeshXform.InverseTransformPosition(EndPos);
+				const FVector LocalEndTan   = MeshXform.InverseTransformVector(EndTan);
+
+				MeshComp->SetStartAndEnd(LocalStart, LocalStartTan, LocalEnd, LocalEndTan, true);
 				MeshComp->SetVisibility(true);
 			}
 			else

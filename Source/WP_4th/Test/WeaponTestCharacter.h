@@ -7,6 +7,8 @@
 #include "InputActionValue.h"
 #include "Character/ApexCharacterBase.h"
 #include "Kismet/GameplayStatics.h"
+#include "Weapon/WeaponTypes.h"
+#include "Interaction/AmmoReserveOwnerInterface.h"
 #include "WeaponTestCharacter.generated.h"
 
 class UCameraComponent;
@@ -20,11 +22,25 @@ class USplineMeshComponent;
 class UDecalComponent;
 class UStaticMesh;
 class UMaterialInterface;
+class UInteractionComponent;
+class APickupBase;
 
 
+UENUM(BlueprintType)
+enum class EWeaponSlotType : uint8
+{
+    Main1     = 0 UMETA(DisplayName = "Main 1"),
+    Main2     = 1 UMETA(DisplayName = "Main 2"),
+    Pistol    = 2 UMETA(DisplayName = "Pistol"),
+    Throwable = 3 UMETA(DisplayName = "Throwable")
+};
+
+
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnReserveAmmoChangedSignature, EAmmoType, Type, int32, NewAmount);
 
 UCLASS()
-class WP_4TH_API AWeaponTestCharacter : public ACharacter
+class WP_4TH_API AWeaponTestCharacter : public ACharacter, public IAmmoReserveOwnerInterface
 {
 	GENERATED_BODY()
 
@@ -36,6 +52,7 @@ protected:
 
 public:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// ========== Components ==========
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
@@ -83,6 +100,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
 	int32 GrenadeCount = 2;
 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapons")
+	int32 MaxGrenadeCount = 3;
+
 	// ========== Input Actions ==========
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputMappingContext* DefaultMappingContext;
@@ -122,6 +142,82 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Input")
 	UInputAction* AimAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* InteractAction;
+
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* DropAction;
+
+	// === Interaction ===
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UInteractionComponent* InteractionComp;
+
+	UFUNCTION(Server, Reliable)
+	void ServerInteract(AActor* TargetInteractable);
+
+	// ========== Weapon Slots ==========
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Slots")
+	TArray<FName> WeaponSlots;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Slots")
+	int32 ActiveSlotIndex = -1;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon|Drop")
+	TSubclassOf<class APickupBase> PickupClass;
+
+	float LastDropTime = -10.f;
+	static constexpr float DropCooldown = 0.3f;
+
+public:
+	void SwitchWeaponByID(FName WeaponID);
+
+	UFUNCTION(BlueprintCallable, Category = "Pickup")
+	void AddGrenade(FName GrenadeID);
+
+	// ========== Ammo Pool (4 종 개별 — TMap 복제 미지원 회피) ==========
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 LightAmmo = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 HeavyAmmo = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 EnergyAmmo = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 ShotgunAmmo = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxLightAmmo = 240;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxHeavyAmmo = 240;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxEnergyAmmo = 240;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxShotgunAmmo = 64;
+
+	UPROPERTY(BlueprintAssignable, Category = "Ammo|Events")
+	FOnReserveAmmoChangedSignature OnReserveAmmoChanged;
+
+	UFUNCTION(BlueprintPure, Category = "Ammo")
+	int32 GetMaxAmmoForType(EAmmoType Type) const;
+
+	UFUNCTION(BlueprintPure, Category = "Ammo")
+	int32 GetAmmoForType(EAmmoType Type) const;
+
+	void SetAmmoForType(EAmmoType Type, int32 NewAmount);
+
+	// IAmmoReserveOwnerInterface
+	virtual int32 GetReserveAmmo(EAmmoType Type) const override;
+	virtual int32 AddAmmo(EAmmoType Type, int32 Count) override;
+	virtual int32 ConsumeReserve(EAmmoType Type, int32 Needed) override;
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Ammo")
+	void ServerAddAmmo(EAmmoType Type, int32 Count);
 
 	// ========== ADS / Camera ==========
 	UPROPERTY(EditAnywhere, Category = "Camera")
@@ -172,13 +268,17 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	// ========== Slot RPC ==========
+	UFUNCTION(Server, Reliable) void ServerSwitchToSlot(int32 SlotIndex);
+	UFUNCTION(Server, Reliable) void ServerAddWeaponToSlot(FName WeaponID);
+	UFUNCTION(Server, Reliable) void ServerDropCurrentWeapon();
+
 protected:
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
 	void StartFire();
 	void StopFire();
 	void Reload();
-	void SwitchWeaponByID(FName WeaponID);
 	void SwitchToAR();
 	void SwitchToPistol();
 	void SwitchToShotgun();
@@ -188,6 +288,15 @@ protected:
 	void LookUp(const FInputActionValue& Value);
 	void OnAimStarted();
 	void OnAimStopped();
+	void OnInteractInput(const FInputActionValue& Value);
+	void OnDropPressed();
+
+	// ========== Slot Helpers ==========
+	bool IsSlotEmpty(int32 SlotIndex) const;
+	int32 FindNextAvailableSlot(int32 SkipIndex) const;
+	EWeaponSlotType GetSlotForCategory(EWeaponType Category) const;
+	void SwitchToSlot_Internal(int32 SlotIndex);
+	void SpawnPickupFromSlot(int32 SlotIndex);
 
 	// === WP4-37/38 ===
 	void StartThrowableAim();
