@@ -241,6 +241,14 @@ void AApexCharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		{
 			EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AApexCharacterBase::OnInteract);
 		}
+		if (TacticalAction)
+		{
+			EIC->BindAction(TacticalAction, ETriggerEvent::Started, this , &AApexCharacterBase::ActivateTactical);
+		}
+		if (UltimateAction)
+		{
+			EIC->BindAction(UltimateAction, ETriggerEvent::Started, this, &AApexCharacterBase::ActivateUltimate);
+		}
 		/*if (SwitchARAction)
 		{
 			EIC->BindAction(SwitchARAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToAR);
@@ -696,7 +704,6 @@ void AApexCharacterBase::OnInteract()
 {
 	if (ZiplineComp) ZiplineComp->TryInterract();
 }
-
 
 void AApexCharacterBase::Multicast_OnDeath_Implementation()
 {

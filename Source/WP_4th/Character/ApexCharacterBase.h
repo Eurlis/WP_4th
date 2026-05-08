@@ -151,6 +151,11 @@ public:
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* InteractAction;
 
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* TacticalAction;
+
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* UltimateAction;
 	// ─── ADS ──────────────────────────────────────────────────────
 	UPROPERTY(EditAnywhere, Category = "ADS")
 	float DefaultFOV = 70.f;
@@ -281,4 +286,7 @@ public:
 	UFUNCTION()
 	void OnInteract();
 
+protected:
+	virtual void ActivateTactical() {};
+	virtual void ActivateUltimate() {};
 };

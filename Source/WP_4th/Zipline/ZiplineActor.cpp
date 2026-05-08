@@ -31,7 +31,7 @@ AZiplineActor::AZiplineActor()
 	USceneComponent* Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	RootComponent = Root;
 
-	// 에디터에서 드래그할 시작/끝 마커
+
 	StartPoint = CreateDefaultSubobject<USceneComponent>(TEXT("StartPoint"));
 	StartPoint->SetupAttachment(Root);
 
@@ -39,15 +39,13 @@ AZiplineActor::AZiplineActor()
 	EndPoint->SetupAttachment(Root);
 	EndPoint->SetRelativeLocation(FVector(500.f, 0.f, 0.f)); // 기본 길이
 
-	// 케이블: StartPoint에 붙이고 EndLocation은 OnConstruction에서 계산
 	CableComp = CreateDefaultSubobject<UCableComponent>(TEXT("CableComp"));
 	CableComp->SetupAttachment(StartPoint);
 	CableComp->bAttachEnd  = false;
 	CableComp->NumSegments = 16;
 	CableComp->CableWidth  = 4.f;
-	CableComp->CableLength = 500.f; // OnConstruction에서 실제 거리로 덮어씀
+	CableComp->CableLength = 500.f;
 
-	// 폴 메시 — 각 마커에 부착
 	StartPoleMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StartPoleMesh"));
 	StartPoleMesh->SetupAttachment(StartPoint);
 	StartPoleMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -56,7 +54,6 @@ AZiplineActor::AZiplineActor()
 	EndPoleMesh->SetupAttachment(EndPoint);
 	EndPoleMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// 탑승 감지 구체 — 각 마커에 부착
 	StartInteractionZone = CreateDefaultSubobject<USphereComponent>(TEXT("StartInteractionZone"));
 	StartInteractionZone->SetupAttachment(StartPoint);
 	StartInteractionZone->SetSphereRadius(180.f);

@@ -18,6 +18,8 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	virtual void ActivateTactical() override; // Stim
+	virtual void ActivateUltimate() override; // Launch Pad
 
 public:
 	// Called every frame
