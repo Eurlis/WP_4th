@@ -5,6 +5,8 @@
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Net/UnrealNetwork.h"
 
 
 // Sets default values
@@ -49,6 +51,30 @@ void AWraith::BeginPlay()
 	EquipWeapon("R301");
 }
 
+void AWraith::ActivateUltimate()
+{
+	Super::ActivateUltimate();
+}
+
+void AWraith::ActivateTactical()
+{
+	if (bTacticalOnCooldown || IsInVoid) return;
+	Server_ActivateTactical();
+}
+
+void AWraith::Server_ActivateTactical_Implementation()
+{
+	if (bTacticalOnCooldown || IsInVoid) return;
+	Multcast_SetvoidState(true);
+	GetWorldTimerManager().SetTimer(TacticalDurationTimer, this, &AWraith::ExitVoid, TacticalDuration, false);
+}
+
+void AWraith::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AWraith, IsInVoid);
+}
+
 // Called every frame
 void AWraith::Tick(float DeltaTime)
 {
@@ -59,5 +85,43 @@ void AWraith::Tick(float DeltaTime)
 void AWraith::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
+}
+
+void AWraith::OnRep_IsInVoid()
+{
+	if (IsInVoid) EnterVoid();
+	else ExitVoid();
+}
+
+void AWraith::EnterVoid()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Wraith] Into the Void 진입!"));
+	GetMesh()->SetScalarParameterValueOnMaterials(TEXT("Opacity"), 0.3f);
+	GetCharacterMovement()->MaxWalkSpeed *=1.5f;
+}
+
+void AWraith::ExitVoid()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[Wraith] Void 종료, 쿨타임 시작"));
+
+	GetMesh()->SetScalarParameterValueOnMaterials(TEXT("Opacity"), 1.f);
+	GetCharacterMovement()->MaxWalkSpeed /=1.5f;
+
+	if (HasAuthority())
+	{
+		bTacticalOnCooldown = true;
+		GetWorldTimerManager().SetTimer(TacticalCooldownTimer,[this]()
+		{
+			bTacticalOnCooldown = false;
+		}, TacticalCooldown, false);
+	}
+
+}
+
+void AWraith::Multcast_SetvoidState_Implementation(bool bInVoid)
+{
+	IsInVoid = bInVoid;
+	if (bInVoid) EnterVoid();
+	else ExitVoid();
 }
 
