@@ -4,7 +4,6 @@
 #include "Components/SplineComponent.h"
 #include "Components/SplineMeshComponent.h"
 #include "GameFramework/Actor.h"
-#include "Materials/MaterialInstanceDynamic.h"
 
 namespace TrajectoryHelper
 {
@@ -17,23 +16,6 @@ namespace TrajectoryHelper
 		AActor* Owner)
 	{
 		if (!Spline || !Owner) return;
-
-		// === [TrajDebug] 임시 디버그 로그 (스팸 방지: 30프레임마다 1회) ===
-		static int32 DebugCallCount = 0;
-		const bool bShouldLog = (DebugCallCount++ % 30 == 0);
-		if (bShouldLog)
-		{
-			if (Material)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[TrajDebug] Material param OK: %s"), *Material->GetName());
-			}
-			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("[TrajDebug] Material param is NULLPTR!"));
-			}
-			UE_LOG(LogTemp, Warning, TEXT("[TrajDebug] Mesh param: %s, MeshPool.Num=%d"),
-				Mesh ? *Mesh->GetName() : TEXT("nullptr"), MeshPool.Num());
-		}
 
 		Spline->ClearSplinePoints(false);
 		for (const FPredictProjectilePathPointData& Point : PathData)
@@ -59,25 +41,6 @@ namespace TrajectoryHelper
 			if (Material)
 			{
 				NewMesh->SetMaterial(0, Material);
-
-				// === [TrajDebug] 임시: 다이내믹 머티리얼 인스턴스로 강제 빨강 ===
-				UMaterialInstanceDynamic* MID = NewMesh->CreateAndSetMaterialInstanceDynamic(0);
-				if (MID)
-				{
-					MID->SetVectorParameterValue(FName("BaseColor"), FLinearColor::Red);
-					MID->SetVectorParameterValue(FName("Emissive"), FLinearColor::Red * 5);
-				}
-
-				// === [TrajDebug] 첫 메시 생성 시 적용 결과 확인 ===
-				if (bShouldLog && MeshPool.Num() == 0)
-				{
-					UMaterialInterface* AppliedMat = NewMesh->GetMaterial(0);
-					UE_LOG(LogTemp, Warning, TEXT("[TrajDebug] NEW Mesh - Applied: %s, SlotCount: %d, StaticMeshSlots: %d, MID: %d"),
-						AppliedMat ? *AppliedMat->GetName() : TEXT("nullptr"),
-						NewMesh->GetNumMaterials(),
-						Mesh ? Mesh->GetStaticMaterials().Num() : -1,
-						MID ? 1 : 0);
-				}
 			}
 			NewMesh->AttachToComponent(Spline, FAttachmentTransformRules::KeepRelativeTransform);
 			NewMesh->RegisterComponent();
@@ -91,33 +54,10 @@ namespace TrajectoryHelper
 
 			if (i < RequiredMeshes)
 			{
-				// === [TrajDebug] 첫 메시 재사용 상태 확인 ===
-				if (bShouldLog && i == 0)
-				{
-					UMaterialInterface* CurMat = MeshComp->GetMaterial(0);
-					UE_LOG(LogTemp, Warning, TEXT("[TrajDebug-Reuse] i=0 Current: %s, ParamMat: %s, Match: %d"),
-						CurMat ? *CurMat->GetName() : TEXT("nullptr"),
-						Material ? *Material->GetName() : TEXT("nullptr"),
-						(CurMat == Material) ? 1 : 0);
-				}
-
-				// 풀 재사용: MID가 없으면 재적용 + MID 강제 빨강
-				if (Material && Cast<UMaterialInstanceDynamic>(MeshComp->GetMaterial(0)) == nullptr)
+				// 안전 마진: 머티리얼이 누락/변경된 경우에만 재적용
+				if (Material && MeshComp->GetMaterial(0) != Material)
 				{
 					MeshComp->SetMaterial(0, Material);
-
-					// === [TrajDebug] 임시: MID 강제 빨강 ===
-					UMaterialInstanceDynamic* ReuseMID = MeshComp->CreateAndSetMaterialInstanceDynamic(0);
-					if (ReuseMID)
-					{
-						ReuseMID->SetVectorParameterValue(FName("BaseColor"), FLinearColor::Red);
-						ReuseMID->SetVectorParameterValue(FName("Emissive"), FLinearColor::Red * 5);
-					}
-
-					if (bShouldLog && i == 0)
-					{
-						UE_LOG(LogTemp, Warning, TEXT("[TrajDebug-Reuse] i=0 Re-applied material + MID red, MID=%d"), ReuseMID ? 1 : 0);
-					}
 				}
 
 				const FVector StartPos = Spline->GetLocationAtSplinePoint(i, ESplineCoordinateSpace::World);

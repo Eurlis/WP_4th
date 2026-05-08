@@ -30,7 +30,7 @@ public:
 	EPickupKind PickupKind = EPickupKind::Weapon;
 
 	// DataTable Row 이름 (WeaponBase::InitFromDataTable 에 그대로 전달)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Pickup")
+	UPROPERTY(ReplicatedUsing = OnRep_PickupWeaponID, EditAnywhere, BlueprintReadOnly, Category = "Pickup")
 	FName PickupWeaponID;
 
 	// DT_Weapons (BP 디폴트로 할당) — 메시/카테고리 자동 로드 소스
@@ -48,6 +48,10 @@ public:
 	USkeletalMeshComponent* PickupSkeletalMesh;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UFUNCTION()
+	void OnRep_PickupWeaponID();
 
 	UFUNCTION(BlueprintCallable, Category = "Pickup")
 	void RefreshFromDataTable();

@@ -17,6 +17,7 @@
 #include "Interaction/InteractionComponent.h"
 #include "Interaction/InteractableInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "Pickup/PickupBase.h"
 
 AWeaponTestCharacter::AWeaponTestCharacter()
 {
@@ -72,6 +73,20 @@ void AWeaponTestCharacter::BeginPlay()
 				Subsystem->AddMappingContext(DefaultMappingContext, 0);
 			}
 		}
+	}
+
+	// 슬롯 초기화 (서버 권한)
+	if (HasAuthority())
+	{
+		if (WeaponSlots.Num() == 0)
+		{
+			WeaponSlots.SetNum(4);
+			for (int32 i = 0; i < 4; ++i) { WeaponSlots[i] = NAME_None; }
+		}
+		if (!ARWeaponID.IsNone())      { WeaponSlots[(int32)EWeaponSlotType::Main1]     = ARWeaponID; }
+		if (!PistolWeaponID.IsNone())  { WeaponSlots[(int32)EWeaponSlotType::Pistol]    = PistolWeaponID; }
+		if (!GrenadeWeaponID.IsNone()) { WeaponSlots[(int32)EWeaponSlotType::Throwable] = GrenadeWeaponID; }
+		ActiveSlotIndex = (int32)EWeaponSlotType::Main1;
 	}
 
 	// 기본 무기 AR로 시작
@@ -189,6 +204,10 @@ void AWeaponTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Init] InteractAction is NULL - check BP assignment"));
+	}
+	if (DropAction)
+	{
+		EnhancedInput->BindAction(DropAction, ETriggerEvent::Started, this, &AWeaponTestCharacter::OnDropPressed);
 	}
 }
 
@@ -378,45 +397,17 @@ void AWeaponTestCharacter::LookUp(const FInputActionValue& Value)
 	}
 }
 
-void AWeaponTestCharacter::SwitchToAR()
-{
-	SwitchWeaponByID(ARWeaponID);
-}
+// TODO: 함수명-의미 불일치. 향후 IA 신설 + 함수명 정리 (예: SwitchToSlot1~4)
+void AWeaponTestCharacter::SwitchToAR()       { ServerSwitchToSlot(0); }
 
-void AWeaponTestCharacter::SwitchToPistol()
-{
-	SwitchWeaponByID(PistolWeaponID);
-}
+// TODO: 함수명-의미 불일치. 향후 IA 신설 + 함수명 정리 (예: SwitchToSlot1~4)
+void AWeaponTestCharacter::SwitchToPistol()   { ServerSwitchToSlot(1); }
 
-void AWeaponTestCharacter::SwitchToShotgun()
-{
-	SwitchWeaponByID(ShotgunWeaponID);
-}
+// TODO: 함수명-의미 불일치. 향후 IA 신설 + 함수명 정리 (예: SwitchToSlot1~4)
+void AWeaponTestCharacter::SwitchToShotgun()  { ServerSwitchToSlot(2); }
 
-void AWeaponTestCharacter::SwitchToGrenade()
-{
-	// 이미 Grenade 슬롯이면 재진입 무시 (입력 중복 + 미래 확장 방어)
-	if (CurrentSlot == EEquippedSlot::Grenade)
-	{
-		return;
-	}
-
-	if (GrenadeCount <= 0)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left!"));
-		return;
-	}
-
-	// 현재 무기 숨기기 (Destroy 하지 말고 Hidden 처리)
-	if (CurrentWeapon)
-	{
-		CurrentWeapon->StopFire();
-		CurrentWeapon->SetActorHiddenInGame(true);
-	}
-
-	CurrentSlot = EEquippedSlot::Grenade;
-	UE_LOG(LogTemp, Warning, TEXT("[Slot] Switched to Grenade (Count: %d)"), GrenadeCount);
-}
+// TODO: 함수명-의미 불일치. 향후 IA 신설 + 함수명 정리 (예: SwitchToSlot1~4)
+void AWeaponTestCharacter::SwitchToGrenade()  { ServerSwitchToSlot(3); }
 
 void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
 {
@@ -511,6 +502,244 @@ void AWeaponTestCharacter::AddGrenade(FName GrenadeID)
 
 	UE_LOG(LogTemp, Log, TEXT("[Grenade] AddGrenade: %s, count = %d/%d"),
 		*GrenadeID.ToString(), GrenadeCount, MaxGrenadeCount);
+}
+
+// ==================== 4슬롯 무기 시스템 ====================
+
+bool AWeaponTestCharacter::IsSlotEmpty(int32 SlotIndex) const
+{
+	return SlotIndex < 0 || SlotIndex >= WeaponSlots.Num() || WeaponSlots[SlotIndex].IsNone();
+}
+
+int32 AWeaponTestCharacter::FindNextAvailableSlot(int32 SkipIndex) const
+{
+	for (int32 i = 0; i < WeaponSlots.Num(); ++i)
+	{
+		if (i == SkipIndex) continue;
+		if (!WeaponSlots[i].IsNone()) return i;
+	}
+	return -1;
+}
+
+EWeaponSlotType AWeaponTestCharacter::GetSlotForCategory(EWeaponType WeaponCategory) const
+{
+	switch (WeaponCategory)
+	{
+		case EWeaponType::Pistol:    return EWeaponSlotType::Pistol;
+		case EWeaponType::Throwable: return EWeaponSlotType::Throwable;
+		case EWeaponType::Rifle:
+		case EWeaponType::Shotgun:
+		case EWeaponType::Sniper:
+		default:                     return EWeaponSlotType::Main1;
+	}
+}
+
+void AWeaponTestCharacter::SwitchToSlot_Internal(int32 SlotIndex)
+{
+	if (IsSlotEmpty(SlotIndex)) return;
+
+	ActiveSlotIndex = SlotIndex;
+
+	if (SlotIndex == (int32)EWeaponSlotType::Throwable)
+	{
+		// 옵션 X: 기존 Grenade 모드 재활용 — 옛 SwitchToGrenade 본체 인라인
+		// GrenadeWeaponID를 슬롯 값으로 동기화
+		GrenadeWeaponID = WeaponSlots[SlotIndex];
+
+		if (CurrentSlot == EEquippedSlot::Grenade)
+		{
+			// 이미 Grenade 모드 — 재진입 무시
+			return;
+		}
+
+		if (GrenadeCount <= 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left!"));
+			return;
+		}
+
+		// 현재 무기 숨기기 (Destroy 하지 말고 Hidden 처리)
+		if (CurrentWeapon)
+		{
+			CurrentWeapon->StopFire();
+			CurrentWeapon->SetActorHiddenInGame(true);
+		}
+
+		CurrentSlot = EEquippedSlot::Grenade;
+		UE_LOG(LogTemp, Warning, TEXT("[Slot] Switched to Throwable slot (Count: %d)"), GrenadeCount);
+	}
+	else
+	{
+		SwitchWeaponByID(WeaponSlots[SlotIndex]);
+	}
+}
+
+void AWeaponTestCharacter::SpawnPickupFromSlot(int32 SlotIndex)
+{
+	if (!HasAuthority()) return;
+	if (IsSlotEmpty(SlotIndex)) return;
+	if (!PickupClass) return;
+
+	const FName WeaponID = WeaponSlots[SlotIndex];
+	const FVector Forward = GetActorForwardVector();
+	const FVector Location = GetActorLocation() + Forward * 80.0f;
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	Params.Owner = this;
+
+	APickupBase* Pickup = GetWorld()->SpawnActor<APickupBase>(
+		PickupClass, Location, FRotator::ZeroRotator, Params);
+
+	if (Pickup)
+	{
+		Pickup->PickupWeaponID = WeaponID;
+		Pickup->ForceNetUpdate();
+		Pickup->RefreshFromDataTable();
+	}
+}
+
+void AWeaponTestCharacter::ServerSwitchToSlot_Implementation(int32 SlotIndex)
+{
+	if (!HasAuthority()) return;
+	if (SlotIndex < 0 || SlotIndex >= WeaponSlots.Num()) return;
+	if (IsSlotEmpty(SlotIndex)) return;
+	SwitchToSlot_Internal(SlotIndex);
+}
+
+void AWeaponTestCharacter::ServerAddWeaponToSlot_Implementation(FName WeaponID)
+{
+	if (!HasAuthority()) return;
+	if (WeaponID.IsNone()) return;
+
+	// DataTable에서 카테고리 조회 — GenericWeaponClass CDO의 WeaponDataTable 사용
+	// (UpdateThrowableAimPreview의 ThrowableCDO->WeaponDataTable 패턴 답습)
+	EWeaponType Category = EWeaponType::Rifle;  // 기본값
+
+	// GenericWeaponClass CDO로 DataTable 접근 시도
+	if (GenericWeaponClass)
+	{
+		AWeaponBase* WeaponCDO = GenericWeaponClass->GetDefaultObject<AWeaponBase>();
+		if (WeaponCDO && WeaponCDO->WeaponDataTable)
+		{
+			const FWeaponData* Data = WeaponCDO->WeaponDataTable->FindRow<FWeaponData>(
+				WeaponID, TEXT("ServerAddWeaponToSlot"));
+			if (Data)
+			{
+				Category = Data->Category;
+			}
+		}
+	}
+	// GenericThrowableClass CDO로 시도 (Throwable 카테고리인 경우)
+	if (Category == EWeaponType::Rifle && GenericThrowableClass)
+	{
+		AThrowableBase* ThrowableCDO = GenericThrowableClass->GetDefaultObject<AThrowableBase>();
+		if (ThrowableCDO && ThrowableCDO->WeaponDataTable)
+		{
+			const FWeaponData* Data = ThrowableCDO->WeaponDataTable->FindRow<FWeaponData>(
+				WeaponID, TEXT("ServerAddWeaponToSlot_Throwable"));
+			if (Data)
+			{
+				Category = Data->Category;
+			}
+		}
+	}
+
+	int32 TargetSlot = -1;
+
+	if (Category == EWeaponType::Pistol)
+	{
+		TargetSlot = (int32)EWeaponSlotType::Pistol;
+	}
+	else if (Category == EWeaponType::Throwable)
+	{
+		TargetSlot = (int32)EWeaponSlotType::Throwable;
+		// 카운트 증가는 기존 AddGrenade 패턴 호출
+		AddGrenade(WeaponID);
+		// 슬롯에 ID만 세팅하고 자동전환 없이 반환
+		WeaponSlots[TargetSlot] = WeaponID;
+		return;
+	}
+	else  // Main 카테고리 (Rifle / Shotgun / Sniper)
+	{
+		if (IsSlotEmpty((int32)EWeaponSlotType::Main1))
+			TargetSlot = (int32)EWeaponSlotType::Main1;
+		else if (IsSlotEmpty((int32)EWeaponSlotType::Main2))
+			TargetSlot = (int32)EWeaponSlotType::Main2;
+		else
+			TargetSlot = (ActiveSlotIndex >= 0 && ActiveSlotIndex <= 1)
+					   ? ActiveSlotIndex
+					   : (int32)EWeaponSlotType::Main1;
+	}
+
+	if (TargetSlot < 0) return;
+
+	const bool bSlotWasOccupied = !IsSlotEmpty(TargetSlot);
+	const bool bIsActiveSlot = (TargetSlot == ActiveSlotIndex);
+
+	// 옵션 b: 활성 슬롯 교체 시 자동 드롭
+	if (bSlotWasOccupied)
+	{
+		SpawnPickupFromSlot(TargetSlot);
+	}
+
+	WeaponSlots[TargetSlot] = WeaponID;
+
+	// 자동 전환 조건: 처음 픽업(ActiveSlotIndex == -1) 또는 활성 슬롯 자체를 교체
+	if (ActiveSlotIndex < 0 || (bSlotWasOccupied && bIsActiveSlot))
+	{
+		SwitchToSlot_Internal(TargetSlot);
+	}
+}
+
+void AWeaponTestCharacter::ServerDropCurrentWeapon_Implementation()
+{
+	if (!HasAuthority()) return;
+	if (ActiveSlotIndex < 0) return;
+	if (IsSlotEmpty(ActiveSlotIndex)) return;
+
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastDropTime < DropCooldown) return;
+	LastDropTime = Now;
+
+	SpawnPickupFromSlot(ActiveSlotIndex);
+
+	const int32 DroppedSlot = ActiveSlotIndex;
+	WeaponSlots[DroppedSlot] = NAME_None;
+
+	// Throwable 슬롯이었으면 GrenadeCount도 0으로 초기화
+	if (DroppedSlot == (int32)EWeaponSlotType::Throwable)
+	{
+		GrenadeCount = 0;
+		GrenadeWeaponID = NAME_None;
+	}
+
+	const int32 NextSlot = FindNextAvailableSlot(DroppedSlot);
+	if (NextSlot >= 0)
+	{
+		SwitchToSlot_Internal(NextSlot);
+	}
+	else
+	{
+		// 빈손
+		if (CurrentWeapon)
+		{
+			CurrentWeapon->Destroy();
+			CurrentWeapon = nullptr;
+		}
+		// Grenade 모드였으면 슬롯 복귀
+		if (CurrentSlot == EEquippedSlot::Grenade)
+		{
+			CurrentSlot = EEquippedSlot::Weapon;
+			StopThrowableAim();
+		}
+		ActiveSlotIndex = -1;
+	}
+}
+
+void AWeaponTestCharacter::OnDropPressed()
+{
+	ServerDropCurrentWeapon();
 }
 
 void AWeaponTestCharacter::ServerApplyDamage(float Damage, ACharacter* DamageInstigator, FHitResult HitResult)
@@ -676,10 +905,12 @@ void AWeaponTestCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, LightAmmo,   COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, HeavyAmmo,   COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, EnergyAmmo,  COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ShotgunAmmo, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, LightAmmo,      COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, HeavyAmmo,      COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, EnergyAmmo,     COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ShotgunAmmo,    COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, WeaponSlots,    COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ActiveSlotIndex, COND_OwnerOnly);
 }
 
 // ==================== Ammo Pool ====================

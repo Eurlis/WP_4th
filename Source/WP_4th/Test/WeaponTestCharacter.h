@@ -23,6 +23,17 @@ class UDecalComponent;
 class UStaticMesh;
 class UMaterialInterface;
 class UInteractionComponent;
+class APickupBase;
+
+
+UENUM(BlueprintType)
+enum class EWeaponSlotType : uint8
+{
+    Main1     = 0 UMETA(DisplayName = "Main 1"),
+    Main2     = 1 UMETA(DisplayName = "Main 2"),
+    Pistol    = 2 UMETA(DisplayName = "Pistol"),
+    Throwable = 3 UMETA(DisplayName = "Throwable")
+};
 
 
 
@@ -135,12 +146,28 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Input")
 	UInputAction* InteractAction;
 
+	UPROPERTY(EditAnywhere, Category = "Input")
+	UInputAction* DropAction;
+
 	// === Interaction ===
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UInteractionComponent* InteractionComp;
 
 	UFUNCTION(Server, Reliable)
 	void ServerInteract(AActor* TargetInteractable);
+
+	// ========== Weapon Slots ==========
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Slots")
+	TArray<FName> WeaponSlots;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Slots")
+	int32 ActiveSlotIndex = -1;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon|Drop")
+	TSubclassOf<class APickupBase> PickupClass;
+
+	float LastDropTime = -10.f;
+	static constexpr float DropCooldown = 0.3f;
 
 public:
 	void SwitchWeaponByID(FName WeaponID);
@@ -241,6 +268,11 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	// ========== Slot RPC ==========
+	UFUNCTION(Server, Reliable) void ServerSwitchToSlot(int32 SlotIndex);
+	UFUNCTION(Server, Reliable) void ServerAddWeaponToSlot(FName WeaponID);
+	UFUNCTION(Server, Reliable) void ServerDropCurrentWeapon();
+
 protected:
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
@@ -257,6 +289,14 @@ protected:
 	void OnAimStarted();
 	void OnAimStopped();
 	void OnInteractInput(const FInputActionValue& Value);
+	void OnDropPressed();
+
+	// ========== Slot Helpers ==========
+	bool IsSlotEmpty(int32 SlotIndex) const;
+	int32 FindNextAvailableSlot(int32 SkipIndex) const;
+	EWeaponSlotType GetSlotForCategory(EWeaponType Category) const;
+	void SwitchToSlot_Internal(int32 SlotIndex);
+	void SpawnPickupFromSlot(int32 SlotIndex);
 
 	// === WP4-37/38 ===
 	void StartThrowableAim();

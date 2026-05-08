@@ -4,6 +4,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/Character.h"
 #include "Engine/DataTable.h"
+#include "Net/UnrealNetwork.h"
 #include "Test/WeaponTestCharacter.h"
 #include "Weapon/WeaponData.h"
 #include "Weapon/WeaponTypes.h"
@@ -33,6 +34,17 @@ APickupBase::APickupBase()
 	PickupSkeletalMesh->SetupAttachment(InteractionSphere);
 	PickupSkeletalMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	PickupSkeletalMesh->SetCollisionProfileName(TEXT("NoCollision"));
+}
+
+void APickupBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(APickupBase, PickupWeaponID);
+}
+
+void APickupBase::OnRep_PickupWeaponID()
+{
+	RefreshFromDataTable();
 }
 
 void APickupBase::BeginPlay()
@@ -144,7 +156,7 @@ void APickupBase::OnInteract(ACharacter* Interactor)
 	switch (PickupKind)
 	{
 	case EPickupKind::Weapon:
-		TestChar->SwitchWeaponByID(PickupWeaponID);
+		TestChar->ServerAddWeaponToSlot(PickupWeaponID);
 		bConsumed = true;
 		break;
 
