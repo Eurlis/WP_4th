@@ -26,21 +26,8 @@ class UInteractionComponent;
 class APickupBase;
 
 
-UENUM(BlueprintType)
-enum class EWeaponSlotType : uint8
-{
-    Main1     = 0 UMETA(DisplayName = "Main 1"),
-    Main2     = 1 UMETA(DisplayName = "Main 2"),
-    Pistol    = 2 UMETA(DisplayName = "Pistol"),
-    Throwable = 3 UMETA(DisplayName = "Throwable")
-};
-
-
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnReserveAmmoChangedSignature, EAmmoType, Type, int32, NewAmount);
-
 UCLASS()
-class WP_4TH_API AWeaponTestCharacter : public ACharacter, public IAmmoReserveOwnerInterface
+ class WP_4TH_API AWeaponTestCharacter : public ACharacter, public IAmmoReserveOwnerInterface
 {
 	GENERATED_BODY()
 

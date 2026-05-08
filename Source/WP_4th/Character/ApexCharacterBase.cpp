@@ -9,6 +9,11 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputActionValue.h"
 #include "WeaponBase.h"
+#include "ThrowableBase.h"
+#include "WeaponData.h"
+#include "Pickup/PickupBase.h"
+#include "Interaction/InteractionComponent.h"
+#include "Interaction/InteractableInterface.h"
 #include "Net/UnrealNetwork.h"
 #include "WP_4th.h"
 
@@ -71,6 +76,7 @@ AApexCharacterBase::AApexCharacterBase()
 
 	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 	ZiplineComp = CreateDefaultSubobject<UZiplineRiderComponent>(TEXT("ZiplineComp"));
+	InteractionComp = CreateDefaultSubobject<UInteractionComponent>(TEXT("InteractionComp"));
 
 
 	//Weapon Setting
@@ -130,8 +136,23 @@ void AApexCharacterBase::OnRep_CurrentWeapon()
 
 void AApexCharacterBase::EquipWeapon(FName WeaponID)
 {
+	SwitchWeaponByID(WeaponID);
+}
+
+void AApexCharacterBase::SwitchWeaponByID(FName WeaponID)
+{
 	if (!HasAuthority()) return;
 	if (WeaponID.IsNone() || !GenericWeaponClass) return;
+
+	// 중복 호출 방어 (수류탄 슬롯 복귀 시는 예외)
+	if (CurrentWeapon && CurrentSlot != EEquippedSlot::Grenade && CurrentWeapon->WeaponID == WeaponID)
+		return;
+
+	if (CurrentSlot == EEquippedSlot::Grenade)
+	{
+		CurrentSlot = EEquippedSlot::Weapon;
+		StopThrowableAim();
+	}
 
 	if (CurrentWeapon)
 	{
@@ -151,7 +172,6 @@ void AApexCharacterBase::EquipWeapon(FName WeaponID)
 
 	CurrentWeapon->InitFromDataTable(WeaponID);
 
-	// FirstPersonMesh의 weapon 소켓에 부착 (소켓명은 팀원 메시에 맞게 수정)
 	CurrentWeapon->AttachToComponent(
 		FirstPersonMesh,
 		FAttachmentTransformRules::SnapToTargetIncludingScale,
@@ -160,6 +180,9 @@ void AApexCharacterBase::EquipWeapon(FName WeaponID)
 	CurrentWeapon->OwningCharacter = this;
 	CurrentWeapon->OnEquipped();
 
+	LastWeaponID = WeaponID;
+
+	BP_OnWeaponEquipped(CurrentWeapon);
 }
 
 void AApexCharacterBase::Tick(float DeltaTime)
@@ -189,6 +212,18 @@ void AApexCharacterBase::BeginPlay()
 	if (HasAuthority() && IsValid(HealthComponent))
 	{
 		HealthComponent->OnDeath.AddDynamic(this, &AApexCharacterBase::HandleDeath);
+	}
+
+	if (HasAuthority() && WeaponSlots.Num() == 0)
+	{
+		WeaponSlots.SetNum(4);
+		for (int32 i = 0; i < 4; ++i) { WeaponSlots[i] = NAME_None; }
+	}
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		if (SavedDefaultWalkSpeed <= 0.f)
+			SavedDefaultWalkSpeed = MoveComp->MaxWalkSpeed;
 	}
 }
 
@@ -261,22 +296,26 @@ void AApexCharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		{
 			EIC->BindAction(UltimateAction, ETriggerEvent::Started, this, &AApexCharacterBase::ActivateUltimate);
 		}
-		/*if (SwitchARAction)
+		if (SwitchARAction)
 		{
-			EIC->BindAction(SwitchARAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToAR);
+			EIC->BindAction(SwitchARAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToSlot0);
 		}
 		if (SwitchPistolAction)
 		{
-			EIC->BindAction(SwitchPistolAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToPistol);
+			EIC->BindAction(SwitchPistolAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToSlot1);
 		}
 		if (SwitchShotgunAction)
 		{
-			EIC->BindAction(SwitchShotgunAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToShotgun);
+			EIC->BindAction(SwitchShotgunAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToSlot2);
 		}
 		if (SwitchGrenadeAction)
 		{
-			EIC->BindAction(SwitchGrenadeAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToGrenade);
-		}*/
+			EIC->BindAction(SwitchGrenadeAction, ETriggerEvent::Started, this, &AApexCharacterBase::SwitchToSlot3);
+		}
+		if (DropAction)
+		{
+			EIC->BindAction(DropAction, ETriggerEvent::Started, this, &AApexCharacterBase::OnDropPressed);
+		}
 	}
 	else
 	{
@@ -291,6 +330,12 @@ void AApexCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(AApexCharacterBase, bIsSprinting);
 	DOREPLIFETIME(AApexCharacterBase, bIsSliding);
 	DOREPLIFETIME(AApexCharacterBase, SlideAnimationPhase);
+	DOREPLIFETIME_CONDITION(AApexCharacterBase, LightAmmo,       COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AApexCharacterBase, HeavyAmmo,       COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AApexCharacterBase, EnergyAmmo,      COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AApexCharacterBase, ShotgunAmmo,     COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AApexCharacterBase, WeaponSlots,     COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AApexCharacterBase, ActiveSlotIndex, COND_OwnerOnly);
 }
 
 void AApexCharacterBase::MoveInput(const FInputActionValue& Value)
@@ -691,6 +736,33 @@ void AApexCharacterBase::HandleDeath()
 void AApexCharacterBase::OnInteract()
 {
 	if (ZiplineComp) ZiplineComp->TryInterract();
+
+	if (!InteractionComp || !InteractionComp->CurrentInteractable) return;
+
+	AActor* Target = InteractionComp->CurrentInteractable;
+	IInteractableInterface* Iface = Cast<IInteractableInterface>(Target);
+	if (!Iface || !Iface->CanInteract(this)) return;
+
+	if (HasAuthority())
+		Iface->OnInteract(this);
+	else
+		ServerInteract(Target);
+}
+
+void AApexCharacterBase::ServerInteract_Implementation(AActor* TargetInteractable)
+{
+	if (!TargetInteractable) return;
+
+	const float MaxAllowedDist = 500.f;
+	if (GetDistanceTo(TargetInteractable) > MaxAllowedDist)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Interact] Target too far: %.1f"), GetDistanceTo(TargetInteractable));
+		return;
+	}
+
+	IInteractableInterface* Iface = Cast<IInteractableInterface>(TargetInteractable);
+	if (Iface && Iface->CanInteract(this))
+		Iface->OnInteract(this);
 }
 
 void AApexCharacterBase::Server_SetAiming_Implementation(bool bAiming)
@@ -730,4 +802,352 @@ void AApexCharacterBase::Multicast_OnDeath_Implementation()
 			PC->UnPossess();
 		}
 	}
+}
+
+// ==================== 슬롯 입력 래퍼 ====================
+
+void AApexCharacterBase::SwitchToSlot0() { ServerSwitchToSlot(0); }
+void AApexCharacterBase::SwitchToSlot1() { ServerSwitchToSlot(1); }
+void AApexCharacterBase::SwitchToSlot2() { ServerSwitchToSlot(2); }
+void AApexCharacterBase::SwitchToSlot3() { ServerSwitchToSlot(3); }
+
+void AApexCharacterBase::OnDropPressed()
+{
+	ServerDropCurrentWeapon();
+}
+
+// ==================== 4슬롯 무기 시스템 ====================
+
+bool AApexCharacterBase::IsSlotEmpty(int32 SlotIndex) const
+{
+	return SlotIndex < 0 || SlotIndex >= WeaponSlots.Num() || WeaponSlots[SlotIndex].IsNone();
+}
+
+int32 AApexCharacterBase::FindNextAvailableSlot(int32 SkipIndex) const
+{
+	for (int32 i = 0; i < WeaponSlots.Num(); ++i)
+	{
+		if (i == SkipIndex) continue;
+		if (!WeaponSlots[i].IsNone()) return i;
+	}
+	return -1;
+}
+
+EWeaponSlotType AApexCharacterBase::GetSlotForCategory(EWeaponType WeaponCategory) const
+{
+	switch (WeaponCategory)
+	{
+		case EWeaponType::Pistol:    return EWeaponSlotType::Pistol;
+		case EWeaponType::Throwable: return EWeaponSlotType::Throwable;
+		default:                     return EWeaponSlotType::Main1;
+	}
+}
+
+void AApexCharacterBase::SwitchToSlot_Internal(int32 SlotIndex)
+{
+	if (IsSlotEmpty(SlotIndex)) return;
+
+	ActiveSlotIndex = SlotIndex;
+
+	if (SlotIndex == (int32)EWeaponSlotType::Throwable)
+	{
+		GrenadeWeaponID = WeaponSlots[SlotIndex];
+
+		if (CurrentSlot == EEquippedSlot::Grenade) return;
+		if (GrenadeCount <= 0)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left!"));
+			return;
+		}
+
+		if (CurrentWeapon)
+		{
+			CurrentWeapon->StopFire();
+			CurrentWeapon->SetActorHiddenInGame(true);
+		}
+
+		CurrentSlot = EEquippedSlot::Grenade;
+	}
+	else
+	{
+		SwitchWeaponByID(WeaponSlots[SlotIndex]);
+	}
+}
+
+void AApexCharacterBase::SpawnPickupFromSlot(int32 SlotIndex)
+{
+	if (!HasAuthority()) return;
+	if (IsSlotEmpty(SlotIndex)) return;
+	if (!PickupClass) return;
+
+	const FName WeaponID = WeaponSlots[SlotIndex];
+	const FVector Forward = GetActorForwardVector();
+	const FVector Location = GetActorLocation() + Forward * 80.0f;
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	Params.Owner = this;
+
+	APickupBase* Pickup = GetWorld()->SpawnActor<APickupBase>(
+		PickupClass, Location, FRotator::ZeroRotator, Params);
+
+	if (Pickup)
+	{
+		Pickup->PickupWeaponID = WeaponID;
+		Pickup->ForceNetUpdate();
+		Pickup->RefreshFromDataTable();
+	}
+}
+
+void AApexCharacterBase::ServerSwitchToSlot_Implementation(int32 SlotIndex)
+{
+	if (!HasAuthority()) return;
+	if (SlotIndex < 0 || SlotIndex >= WeaponSlots.Num()) return;
+	if (IsSlotEmpty(SlotIndex)) return;
+	SwitchToSlot_Internal(SlotIndex);
+}
+
+void AApexCharacterBase::ServerAddWeaponToSlot_Implementation(FName WeaponID)
+{
+	if (!HasAuthority()) return;
+	if (WeaponID.IsNone()) return;
+
+	EWeaponType Category = EWeaponType::Rifle;
+
+	if (GenericWeaponClass)
+	{
+		AWeaponBase* WeaponCDO = GenericWeaponClass->GetDefaultObject<AWeaponBase>();
+		if (WeaponCDO && WeaponCDO->WeaponDataTable)
+		{
+			const FWeaponData* Data = WeaponCDO->WeaponDataTable->FindRow<FWeaponData>(
+				WeaponID, TEXT("ServerAddWeaponToSlot"));
+			if (Data) Category = Data->Category;
+		}
+	}
+	if (Category == EWeaponType::Rifle && GenericThrowableClass)
+	{
+		AThrowableBase* ThrowableCDO = GenericThrowableClass->GetDefaultObject<AThrowableBase>();
+		if (ThrowableCDO && ThrowableCDO->WeaponDataTable)
+		{
+			const FWeaponData* Data = ThrowableCDO->WeaponDataTable->FindRow<FWeaponData>(
+				WeaponID, TEXT("ServerAddWeaponToSlot_Throwable"));
+			if (Data) Category = Data->Category;
+		}
+	}
+
+	int32 TargetSlot = -1;
+
+	if (Category == EWeaponType::Pistol)
+	{
+		TargetSlot = (int32)EWeaponSlotType::Pistol;
+	}
+	else if (Category == EWeaponType::Throwable)
+	{
+		TargetSlot = (int32)EWeaponSlotType::Throwable;
+		AddGrenade(WeaponID);
+		WeaponSlots[TargetSlot] = WeaponID;
+		return;
+	}
+	else
+	{
+		if (IsSlotEmpty((int32)EWeaponSlotType::Main1))
+			TargetSlot = (int32)EWeaponSlotType::Main1;
+		else if (IsSlotEmpty((int32)EWeaponSlotType::Main2))
+			TargetSlot = (int32)EWeaponSlotType::Main2;
+		else
+			TargetSlot = (ActiveSlotIndex >= 0 && ActiveSlotIndex <= 1)
+					   ? ActiveSlotIndex
+					   : (int32)EWeaponSlotType::Main1;
+	}
+
+	if (TargetSlot < 0) return;
+
+	const bool bSlotWasOccupied = !IsSlotEmpty(TargetSlot);
+	const bool bIsActiveSlot = (TargetSlot == ActiveSlotIndex);
+
+	if (bSlotWasOccupied) SpawnPickupFromSlot(TargetSlot);
+
+	WeaponSlots[TargetSlot] = WeaponID;
+
+	if (ActiveSlotIndex < 0 || (bSlotWasOccupied && bIsActiveSlot))
+		SwitchToSlot_Internal(TargetSlot);
+}
+
+void AApexCharacterBase::ServerDropCurrentWeapon_Implementation()
+{
+	if (!HasAuthority()) return;
+	if (ActiveSlotIndex < 0) return;
+	if (IsSlotEmpty(ActiveSlotIndex)) return;
+
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastDropTime < DropCooldown) return;
+	LastDropTime = Now;
+
+	SpawnPickupFromSlot(ActiveSlotIndex);
+
+	const int32 DroppedSlot = ActiveSlotIndex;
+	WeaponSlots[DroppedSlot] = NAME_None;
+
+	if (DroppedSlot == (int32)EWeaponSlotType::Throwable)
+	{
+		GrenadeCount = 0;
+		GrenadeWeaponID = NAME_None;
+	}
+
+	const int32 NextSlot = FindNextAvailableSlot(DroppedSlot);
+	if (NextSlot >= 0)
+	{
+		SwitchToSlot_Internal(NextSlot);
+	}
+	else
+	{
+		if (CurrentWeapon)
+		{
+			CurrentWeapon->Destroy();
+			CurrentWeapon = nullptr;
+		}
+		if (CurrentSlot == EEquippedSlot::Grenade)
+		{
+			CurrentSlot = EEquippedSlot::Weapon;
+			StopThrowableAim();
+		}
+		ActiveSlotIndex = -1;
+	}
+}
+
+void AApexCharacterBase::AddGrenade(FName GrenadeID)
+{
+	if (!HasAuthority()) return;
+	if (GrenadeID.IsNone()) return;
+
+	if (GrenadeWeaponID != GrenadeID) GrenadeWeaponID = GrenadeID;
+
+	GrenadeCount = FMath::Min(GrenadeCount + 1, MaxGrenadeCount);
+
+	UE_LOG(LogTemp, Log, TEXT("[Grenade] AddGrenade: %s, count = %d/%d"),
+		*GrenadeID.ToString(), GrenadeCount, MaxGrenadeCount);
+}
+
+void AApexCharacterBase::ThrowGrenade()
+{
+	if (GrenadeCount <= 0 || !GenericThrowableClass || !GetController()) return;
+
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	GetController()->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+	FVector SpawnLocation = CameraLocation + CameraRotation.Vector() * 100.f;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AThrowableBase* Grenade = GetWorld()->SpawnActor<AThrowableBase>(
+		GenericThrowableClass, SpawnLocation, CameraRotation, SpawnParams);
+
+	if (Grenade)
+	{
+		Grenade->InitFromDataTable(GrenadeWeaponID);
+
+		FVector ThrowDirection = CameraRotation.Vector();
+		ThrowDirection.Z += 0.2f;
+		ThrowDirection.Normalize();
+
+		Grenade->ServerThrow(ThrowDirection);
+		GrenadeCount--;
+	}
+}
+
+void AApexCharacterBase::StopThrowableAim()
+{
+	bIsAimingThrowable = false;
+}
+
+// ==================== Ammo Pool ====================
+
+int32 AApexCharacterBase::GetMaxAmmoForType(EAmmoType Type) const
+{
+	switch (Type)
+	{
+	case EAmmoType::Light:   return MaxLightAmmo;
+	case EAmmoType::Heavy:   return MaxHeavyAmmo;
+	case EAmmoType::Energy:  return MaxEnergyAmmo;
+	case EAmmoType::Shotgun: return MaxShotgunAmmo;
+	case EAmmoType::Sniper:  return MaxHeavyAmmo;
+	default:                 return 0;
+	}
+}
+
+int32 AApexCharacterBase::GetAmmoForType(EAmmoType Type) const
+{
+	switch (Type)
+	{
+	case EAmmoType::Light:   return LightAmmo;
+	case EAmmoType::Heavy:   return HeavyAmmo;
+	case EAmmoType::Energy:  return EnergyAmmo;
+	case EAmmoType::Shotgun: return ShotgunAmmo;
+	case EAmmoType::Sniper:  return HeavyAmmo;
+	default:                 return 0;
+	}
+}
+
+void AApexCharacterBase::SetAmmoForType(EAmmoType Type, int32 NewAmount)
+{
+	switch (Type)
+	{
+	case EAmmoType::Light:   LightAmmo   = NewAmount; break;
+	case EAmmoType::Heavy:   HeavyAmmo   = NewAmount; break;
+	case EAmmoType::Energy:  EnergyAmmo  = NewAmount; break;
+	case EAmmoType::Shotgun: ShotgunAmmo = NewAmount; break;
+	case EAmmoType::Sniper:  HeavyAmmo   = NewAmount; break;
+	default: break;
+	}
+}
+
+int32 AApexCharacterBase::GetReserveAmmo(EAmmoType Type) const
+{
+	return GetAmmoForType(Type);
+}
+
+int32 AApexCharacterBase::AddAmmo(EAmmoType Type, int32 Count)
+{
+	if (Count <= 0) return 0;
+
+	if (!HasAuthority())
+	{
+		ServerAddAmmo(Type, Count);
+		return 0;
+	}
+
+	const int32 Current = GetAmmoForType(Type);
+	const int32 Max = GetMaxAmmoForType(Type);
+	const int32 Added = FMath::Clamp(Max - Current, 0, Count);
+	if (Added <= 0) return 0;
+
+	const int32 NewAmount = Current + Added;
+	SetAmmoForType(Type, NewAmount);
+
+	OnReserveAmmoChanged.Broadcast(Type, NewAmount);
+	return Added;
+}
+
+int32 AApexCharacterBase::ConsumeReserve(EAmmoType Type, int32 Needed)
+{
+	if (Needed <= 0 || !HasAuthority()) return 0;
+
+	const int32 Current = GetAmmoForType(Type);
+	if (Current <= 0) return 0;
+
+	const int32 Consumed = FMath::Min(Needed, Current);
+	const int32 NewAmount = Current - Consumed;
+	SetAmmoForType(Type, NewAmount);
+
+	OnReserveAmmoChanged.Broadcast(Type, NewAmount);
+	return Consumed;
+}
+
+void AApexCharacterBase::ServerAddAmmo_Implementation(EAmmoType Type, int32 Count)
+{
+	AddAmmo(Type, Count);
 }

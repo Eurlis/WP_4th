@@ -5,7 +5,7 @@
 #include "GameFramework/Character.h"
 #include "Engine/DataTable.h"
 #include "Net/UnrealNetwork.h"
-#include "Test/WeaponTestCharacter.h"
+#include "Character/ApexCharacterBase.h"
 #include "Weapon/WeaponData.h"
 #include "Weapon/WeaponTypes.h"
 #include "Interaction/AmmoReserveOwnerInterface.h"
@@ -138,10 +138,10 @@ void APickupBase::OnInteract(ACharacter* Interactor)
 		return;
 	}
 
-	AWeaponTestCharacter* TestChar = Cast<AWeaponTestCharacter>(Interactor);
+	AApexCharacterBase* TestChar = Cast<AApexCharacterBase>(Interactor);
 	if (!TestChar)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Pickup] Interactor is not WeaponTestCharacter"));
+		UE_LOG(LogTemp, Warning, TEXT("[Pickup] Interactor is not ApexCharacterBase"));
 		return;
 	}
 

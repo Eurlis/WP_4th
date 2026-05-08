@@ -6,6 +6,8 @@
 #include "Components/PakourComp/PakousComponent.h"
 #include "MotionWarping/Public/MotionWarping.h"
 #include "Character/Components/ZiplineComp/ZiplineRiderComponent.h"
+#include "Interaction/AmmoReserveOwnerInterface.h"
+#include "Weapon/WeaponTypes.h"
 #include "ApexCharacterBase.generated.h"
 
 class UHealthComponent;
@@ -13,6 +15,9 @@ class UInputAction;
 class USkeletalMeshComponent;
 class UCameraComponent;
 class AWeaponBase;
+class UInteractionComponent;
+class AThrowableBase;
+class APickupBase;
 
 UENUM(BlueprintType)
 enum class ESlideAnimationPhase : uint8
@@ -28,8 +33,19 @@ enum class EEquippedSlot : uint8
 	Weapon,
 	Grenade
 };
+UENUM(BlueprintType)
+enum class EWeaponSlotType : uint8
+{
+	Main1     = 0 UMETA(DisplayName = "Main 1"),
+	Main2     = 1 UMETA(DisplayName = "Main 2"),
+	Pistol    = 2 UMETA(DisplayName = "Pistol"),
+	Throwable = 3 UMETA(DisplayName = "Throwable")
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnReserveAmmoChangedSignature, EAmmoType, Type, int32, NewAmount);
+
 UCLASS(abstract)
-class WP_4TH_API AApexCharacterBase : public ACharacter
+class WP_4TH_API AApexCharacterBase : public ACharacter, public IAmmoReserveOwnerInterface
 {
 	GENERATED_BODY()
 
@@ -47,6 +63,11 @@ public:
 	UFUNCTION()
 	void OnRep_CurrentWeapon();
 	void EquipWeapon(FName WeaponID);
+	void SwitchWeaponByID(FName WeaponID);
+
+	UFUNCTION(BlueprintCallable, Category = "Pickup")
+	void AddGrenade(FName GrenadeID);
+
 	// ─── Components ───────────────────────────────────────────────
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UHealthComponent* HealthComponent;
@@ -58,6 +79,96 @@ public:
 	TSubclassOf<AWeaponBase> GenericWeaponClass;
 	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
 	EEquippedSlot CurrentSlot = EEquippedSlot::Weapon;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UInteractionComponent* InteractionComp;
+
+	// ─── Weapon Slots ─────────────────────────────────────────────
+	UPROPERTY(EditAnywhere, Category = "Weapons")
+	TSubclassOf<AThrowableBase> GenericThrowableClass;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapon|Drop")
+	TSubclassOf<APickupBase> PickupClass;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Slots")
+	TArray<FName> WeaponSlots;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Weapon|Slots")
+	int32 ActiveSlotIndex = -1;
+
+	UPROPERTY()
+	FName LastWeaponID;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
+	int32 GrenadeCount = 2;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapons")
+	int32 MaxGrenadeCount = 3;
+
+	UPROPERTY()
+	FName GrenadeWeaponID;
+
+	// ─── Ammo Pool ────────────────────────────────────────────────
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 LightAmmo = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 HeavyAmmo = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 EnergyAmmo = 0;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
+	int32 ShotgunAmmo = 0;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxLightAmmo = 240;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxHeavyAmmo = 240;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxEnergyAmmo = 240;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ammo|Max")
+	int32 MaxShotgunAmmo = 64;
+
+	UPROPERTY(BlueprintAssignable, Category = "Ammo|Events")
+	FOnReserveAmmoChangedSignature OnReserveAmmoChanged;
+
+	UFUNCTION(BlueprintPure, Category = "Ammo")
+	int32 GetMaxAmmoForType(EAmmoType Type) const;
+
+	UFUNCTION(BlueprintPure, Category = "Ammo")
+	int32 GetAmmoForType(EAmmoType Type) const;
+
+	void SetAmmoForType(EAmmoType Type, int32 NewAmount);
+
+	// IAmmoReserveOwnerInterface
+	virtual int32 GetReserveAmmo(EAmmoType Type) const override;
+	virtual int32 AddAmmo(EAmmoType Type, int32 Count) override;
+	virtual int32 ConsumeReserve(EAmmoType Type, int32 Needed) override;
+
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "Ammo")
+	void ServerAddAmmo(EAmmoType Type, int32 Count);
+
+	// ─── Slot RPCs ────────────────────────────────────────────────
+	UFUNCTION(Server, Reliable)
+	void ServerSwitchToSlot(int32 SlotIndex);
+
+	UFUNCTION(Server, Reliable)
+	void ServerAddWeaponToSlot(FName WeaponID);
+
+	UFUNCTION(Server, Reliable)
+	void ServerDropCurrentWeapon();
+
+	UFUNCTION(Server, Reliable)
+	void ServerInteract(AActor* TargetInteractable);
+
+	// ─── BP Events ────────────────────────────────────────────────
+	UFUNCTION(BlueprintImplementableEvent, Category = "Weapon|Events", meta = (DisplayName = "On Weapon Equipped"))
+	void BP_OnWeaponEquipped(AWeaponBase* NewWeapon);
+
 	// ─── Movement State ───────────────────────────────────────────
 	UPROPERTY(ReplicatedUsing = OnRep_IsSprinting, BlueprintReadOnly, Category = "Movement")
 	bool bIsSprinting;
@@ -158,6 +269,10 @@ public:
 
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* UltimateAction;
+
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* DropAction;
+
 	// ─── ADS ──────────────────────────────────────────────────────
 	UPROPERTY(EditAnywhere, Category = "ADS")
 	float DefaultFOV = 70.f;
@@ -249,6 +364,13 @@ protected:
 	UFUNCTION()
 	void OnRep_SlideAnimationPhase();
 
+	// ─── Slot Switch Helpers ──────────────────────────────────────
+	void SwitchToSlot0();
+	void SwitchToSlot1();
+	void SwitchToSlot2();
+	void SwitchToSlot3();
+	void OnDropPressed();
+
 private:
 	bool CanStartSlide() const;
 	void BeginSlide();
@@ -259,7 +381,7 @@ private:
 	void TickSlide(float DeltaTime);
 
 	FVector SlideDirection;
-	float SlideSpeed;           // slope 재투영 오차 방지용 별도 속도 트래킹
+	float SlideSpeed;
 	float SlideEnterEndTime;
 	float SlideExitEndTime;
 	float SlideUngroundedTime;
@@ -268,7 +390,17 @@ private:
 	float DefaultMaxWalkSpeedCrouched;
 	float SavedDefaultWalkSpeed = 0.f;
 
-
+	// ─── Slot Private Helpers ─────────────────────────────────────
+	bool IsSlotEmpty(int32 SlotIndex) const;
+	int32 FindNextAvailableSlot(int32 SkipIndex) const;
+	EWeaponSlotType GetSlotForCategory(EWeaponType Category) const;
+	void SwitchToSlot_Internal(int32 SlotIndex);
+	void SpawnPickupFromSlot(int32 SlotIndex);
+	void ThrowGrenade();
+	void StopThrowableAim();
+	bool bIsAimingThrowable = false;
+	float LastDropTime = -10.f;
+	static constexpr float DropCooldown = 0.3f;
 
 	// ─── Death ────────────────────────────────────────────────────
 	UFUNCTION()
