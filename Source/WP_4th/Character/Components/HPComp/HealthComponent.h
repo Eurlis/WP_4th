@@ -28,8 +28,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Health")
 	float MaxShield;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Combat")
-	float HeadshotMultiplier;
 
 	UPROPERTY(BlueprintAssignable, Category = "Health")
 	FOnDeath OnDeath;

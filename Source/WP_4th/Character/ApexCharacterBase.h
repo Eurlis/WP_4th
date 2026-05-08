@@ -44,13 +44,15 @@ protected:
 public:
 	AApexCharacterBase();
 
+	UFUNCTION()
+	void OnRep_CurrentWeapon();
 	void EquipWeapon(FName WeaponID);
 	// ─── Components ───────────────────────────────────────────────
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UHealthComponent* HealthComponent;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category= "Components")
 	UPakousComponent* PakComp;
-	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentWeapon)
 	AWeaponBase* CurrentWeapon;
 	UPROPERTY(EditAnywhere, Category= "Weapon")
 	TSubclassOf<AWeaponBase> GenericWeaponClass;
@@ -285,7 +287,8 @@ public:
 
 	UFUNCTION()
 	void OnInteract();
-
+	UFUNCTION(Server, Reliable)
+	void Server_SetAiming(bool bAiming);
 protected:
 	virtual void ActivateTactical() {};
 	virtual void ActivateUltimate() {};

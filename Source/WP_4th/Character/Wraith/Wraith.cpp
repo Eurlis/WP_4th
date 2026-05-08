@@ -48,7 +48,7 @@ AWraith::AWraith()
 void AWraith::BeginPlay()
 {
 	Super::BeginPlay();
-	EquipWeapon("R301");
+	EquipWeapon("Peacekeeper");
 }
 
 void AWraith::ActivateUltimate()

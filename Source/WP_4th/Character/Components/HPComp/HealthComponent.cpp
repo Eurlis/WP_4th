@@ -8,7 +8,6 @@ UHealthComponent::UHealthComponent()
 
 	MaxHealth = 100.f;
 	MaxShield = 100.f;
-	HeadshotMultiplier = 1.5f;
 }
 
 void UHealthComponent::BeginPlay()
@@ -30,8 +29,7 @@ void UHealthComponent::ApplyDamage(float RawDamage, bool bIsHeadshot)
 	if (!GetOwner()->HasAuthority()) return;
 	if (IsDead()) return;
 
-	float FinalDamage = bIsHeadshot ? RawDamage * HeadshotMultiplier : RawDamage;
-
+	float FinalDamage = RawDamage;
 	if (Shield > 0.f)
 	{
 		float ShieldDamage = FMath::Min(Shield, FinalDamage);
