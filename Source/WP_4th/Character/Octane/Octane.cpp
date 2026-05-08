@@ -10,7 +10,7 @@ AOctane::AOctane()
 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 	ConstructorHelpers::FObjectFinder<USkeletalMesh> OctaneMesh(TEXT("/Game/Models/Octane/Octane/ocatane.ocatane"));
-	if (OctaneMesh.Succeeded())ㅈ
+	if (OctaneMesh.Succeeded())
 	{
 		FirstPersonMesh->SetSkeletalMesh(OctaneMesh.Object);
 		GetMesh()->SetSkeletalMesh(OctaneMesh.Object);
