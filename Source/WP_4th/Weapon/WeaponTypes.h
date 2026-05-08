@@ -35,3 +35,16 @@ enum class EWeaponType : uint8
 	Throwable   UMETA(DisplayName = "Throwable"),
 	Ammo        UMETA(DisplayName = "Ammo")
 };
+
+/** 종류별 수류탄 카운트 엔트리 (인벤토리 SSOT) */
+USTRUCT(BlueprintType)
+struct FGrenadeStockEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Grenade")
+	FName GrenadeID = NAME_None;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Grenade")
+	int32 Count = 0;
+};

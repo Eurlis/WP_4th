@@ -161,8 +161,13 @@ void APickupBase::OnInteract(ACharacter* Interactor)
 		break;
 
 	case EPickupKind::Throwable:
-		TestChar->AddGrenade(PickupWeaponID);
-		bConsumed = true;
+		// helper 직접 호출(서버 권한): 풀(MaxGrenadeCount) 도달 시 false → 픽업 미파괴
+		bConsumed = TestChar->TryAddGrenadeAuth(PickupWeaponID);
+		if (!bConsumed)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[Pickup] Grenade stock full for %s, pickup not consumed"),
+				*PickupWeaponID.ToString());
+		}
 		break;
 
 	case EPickupKind::Ammo:
