@@ -116,9 +116,21 @@ AApexCharacterBase::AApexCharacterBase()
 	if (IA_Aim.Succeeded()) AimAction = IA_Aim.Object;
 }
 
+void AApexCharacterBase::OnRep_CurrentWeapon()
+{
+	if (!CurrentWeapon) return;
+	CurrentWeapon->OwningCharacter = this;
+	CurrentWeapon->AttachToComponent(
+		FirstPersonMesh,
+		FAttachmentTransformRules::SnapToTargetIncludingScale,
+		FName("weapon_r"));
+	CurrentWeapon->OnEquipped();
+
+}
+
 void AApexCharacterBase::EquipWeapon(FName WeaponID)
 {
-
+	if (!HasAuthority()) return;
 	if (WeaponID.IsNone() || !GenericWeaponClass) return;
 
 	if (CurrentWeapon)
@@ -275,6 +287,7 @@ void AApexCharacterBase::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 void AApexCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AApexCharacterBase, CurrentWeapon);
 	DOREPLIFETIME(AApexCharacterBase, bIsSprinting);
 	DOREPLIFETIME(AApexCharacterBase, bIsSliding);
 	DOREPLIFETIME(AApexCharacterBase, SlideAnimationPhase);
@@ -331,14 +344,7 @@ float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& Dam
 		return 0.f;
 	}
 
-	bool bIsHeadshot = false;
-	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
-	{
-		const FPointDamageEvent* PointDamage = static_cast<const FPointDamageEvent*>(&DamageEvent);
-		bIsHeadshot = PointDamage->HitInfo.BoneName == FName("head");
-	}
-
-	HealthComponent->ApplyDamage(DamageAmount, bIsHeadshot);
+	HealthComponent->ApplyDamage(DamageAmount, false);
 	return DamageAmount;
 }
 
@@ -641,31 +647,13 @@ void AApexCharacterBase::OnRep_SlideAnimationPhase()
 void AApexCharacterBase::OnAimStarted()
 {
 	if (CurrentSlot != EEquippedSlot::Weapon || !CurrentWeapon) return;
-
-	if (CurrentWeapon->bIsAiming)
-		OnAimStopped();
-	else
-	{
-		CurrentWeapon->StartAiming();
-		if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
-		{
-			if (SavedDefaultWalkSpeed <= 0.f)
-				SavedDefaultWalkSpeed = MoveComp->MaxWalkSpeed;
-			MoveComp->MaxWalkSpeed = SavedDefaultWalkSpeed * ADSWalkSpeedMultiplier;
-		}
-	}
+	Server_SetAiming(!CurrentWeapon->bIsAiming);
 }
 
 void AApexCharacterBase::OnAimStopped()
 {
-	if (CurrentWeapon)
-		CurrentWeapon->StopAiming();
+	Server_SetAiming(false);
 
-	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
-	{
-		if (SavedDefaultWalkSpeed > 0.f)
-			MoveComp->MaxWalkSpeed = SavedDefaultWalkSpeed;
-	}
 }
 
 void AApexCharacterBase::StartFire()
@@ -705,13 +693,41 @@ void AApexCharacterBase::OnInteract()
 	if (ZiplineComp) ZiplineComp->TryInterract();
 }
 
+void AApexCharacterBase::Server_SetAiming_Implementation(bool bAiming)
+{
+	if (!CurrentWeapon) return;
+
+	if (bAiming)
+		CurrentWeapon->StartAiming();
+	else
+		CurrentWeapon->StopAiming();
+
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (!MoveComp) return;
+
+	if (bAiming)
+	{
+		if (SavedDefaultWalkSpeed <= 0.f)
+			SavedDefaultWalkSpeed = MoveComp->MaxWalkSpeed;
+		MoveComp->MaxWalkSpeed = SavedDefaultWalkSpeed * ADSWalkSpeedMultiplier;
+	}
+	else
+	{
+		if (SavedDefaultWalkSpeed > 0.f)
+			MoveComp->MaxWalkSpeed = SavedDefaultWalkSpeed;
+	}
+
+}
+
 void AApexCharacterBase::Multicast_OnDeath_Implementation()
 {
 	GetMesh()->SetSimulatePhysics(true);
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-	if (AController* PC = GetController())
+	if (HasAuthority())
 	{
-		PC->UnPossess();
+		if (AController* PC = GetController())
+		{
+			PC->UnPossess();
+		}
 	}
 }

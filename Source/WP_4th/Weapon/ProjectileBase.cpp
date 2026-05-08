@@ -190,7 +190,17 @@ void AProjectileBase::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UP
 			FinalDamage *= LegMultiplier;
 		}
 
-		// TODO: ServerApplyDamage(FinalDamage, OwnerCharacter, Hit) — 캐릭터 베이스에서 구현 예정
+		if (HasAuthority())
+		{
+			UGameplayStatics::ApplyPointDamage(
+				HitChar,
+				FinalDamage,
+				(Hit.ImpactPoint - OwnerCharacter->GetActorLocation()).GetSafeNormal(),
+				Hit,
+				OwnerController,
+				this,
+				nullptr);
+		}
 	}
 
 	// 임팩트 이펙트 브로드캐스트 (모든 클라이언트 동기화) - Deactivate 전에 호출
