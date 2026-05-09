@@ -47,6 +47,23 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pickup")
 	USkeletalMeshComponent* PickupSkeletalMesh;
 
+	// PickupKind 별 바닥 snap 보정값 (cm). 메시 두께는 BoundingBox 자동 반영, 이 값은 미세 조정용.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pickup|Snap")
+	float WeaponSnapGroundOffset = 20.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pickup|Snap")
+	float AmmoSnapGroundOffset = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pickup|Snap")
+	float ThrowableSnapGroundOffset = 1.0f;
+
+	// 픽업 표시 전용 절대 회전. true 면 DT MeshRotation 무시하고 이 값 사용. 손 장착 자세는 영향 없음.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pickup|Rotation")
+	bool bUsePickupAbsoluteRotation = true;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pickup|Rotation")
+	FRotator PickupAbsoluteRotation = FRotator(0.f, 0.f, 0.f);
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -64,4 +81,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+
+	// 서버 권한에서 BeginPlay 시 바닥으로 LineTrace 후 위치 보정
+	void SnapToGround();
 };

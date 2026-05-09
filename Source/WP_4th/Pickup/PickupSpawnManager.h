@@ -22,12 +22,17 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pickup")
 	TSubclassOf<APickupBase> PickupClass;
 
+	// PickupBase::SnapToGround 가 BeginPlay 에서 바닥으로 자동 보정함. 기본 0 권장.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn")
-	float SpawnZOffset = 50.0f;
+	float SpawnZOffset = 0.0f;
 
-	// 무기 옆 탄창 그룹 스폰 시 사용하는 XY 반경 (cm)
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn")
-	float AmmoGroupSpawnRadius = 150.0f;
+	// 무기 우측 첫 탄창까지 거리 (cm)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn|Ammo")
+	float AmmoDistanceFromWeapon = 50.0f;
+
+	// 탄창 간 간격 (i 번째 탄창은 AmmoDistanceFromWeapon + i * AmmoSpacingBetween 만큼 떨어짐)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Spawn|Ammo")
+	float AmmoSpacingBetween = 30.0f;
 
 	UFUNCTION(BlueprintCallable, Category = "Spawn")
 	void SpawnAllPickups();
@@ -46,5 +51,5 @@ private:
 	static FName GetAmmoPickupRowNameFromAmmoType(EAmmoType Type);
 
 	// 무기 위치 옆에 호환 탄창 1~2개 스폰. 실제 스폰된 개수 반환.
-	int32 SpawnAmmoNearWeapon(const FVector& WeaponLocation, EAmmoType AmmoType);
+	int32 SpawnAmmoNearWeapon(const FVector& WeaponLocation, const FRotator& WeaponRotation, EAmmoType AmmoType);
 };

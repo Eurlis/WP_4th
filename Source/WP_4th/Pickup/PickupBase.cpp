@@ -2,6 +2,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "GameFramework/Character.h"
 #include "Engine/DataTable.h"
 #include "Net/UnrealNetwork.h"
@@ -51,6 +52,64 @@ void APickupBase::BeginPlay()
 {
 	Super::BeginPlay();
 	RefreshFromDataTable();
+	// SnapToGround 는 RefreshFromDataTable 끝에서 호출됨
+	// (BeginPlay 시점에는 PickupWeaponID 미설정일 수 있어 PickupKind 가 부정확)
+}
+
+void APickupBase::SnapToGround()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	const FVector Origin = GetActorLocation();
+	const FVector Start = Origin + FVector(0.f, 0.f, 100.f);
+	const FVector End = Origin - FVector(0.f, 0.f, 500.f);
+
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(PickupSnapToGround), false, this);
+
+	if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_WorldStatic, Params))
+	{
+		// 활성 메시 컴포넌트 결정 (InteractionSphere 제외)
+		USceneComponent* ActiveMesh = nullptr;
+		if (PickupKind == EPickupKind::Weapon && PickupSkeletalMesh && PickupSkeletalMesh->GetSkeletalMeshAsset())
+		{
+			ActiveMesh = PickupSkeletalMesh;
+		}
+		else if (PickupMesh && PickupMesh->GetStaticMesh())
+		{
+			ActiveMesh = PickupMesh;
+		}
+
+		// 메시 Bounds 의 하단을 바닥에 맞춤 (피벗/스케일/회전 자동 반영)
+		float PivotToBottom = 0.0f;
+		if (ActiveMesh)
+		{
+			// 회전 변경 직후 Bounds 미갱신 방지 — 강제 재계산
+			ActiveMesh->UpdateBounds();
+
+			const FBoxSphereBounds B = ActiveMesh->Bounds;
+			const float MeshBottomZ = B.Origin.Z - B.BoxExtent.Z;
+			PivotToBottom = GetActorLocation().Z - MeshBottomZ;
+		}
+
+		// PickupKind 별 미세 보정값 결정
+		float FinalSnapOffset = WeaponSnapGroundOffset;
+		switch (PickupKind)
+		{
+		case EPickupKind::Ammo:      FinalSnapOffset = AmmoSnapGroundOffset; break;
+		case EPickupKind::Throwable: FinalSnapOffset = ThrowableSnapGroundOffset; break;
+		case EPickupKind::Weapon:
+		default:                     FinalSnapOffset = WeaponSnapGroundOffset; break;
+		}
+
+		FVector NewLocation = Hit.ImpactPoint;
+		NewLocation.Z += PivotToBottom + FinalSnapOffset;
+		SetActorLocation(NewLocation, false, nullptr, ETeleportType::TeleportPhysics);
+	}
 }
 
 void APickupBase::OnConstruction(const FTransform& Transform)
@@ -73,6 +132,20 @@ void APickupBase::RefreshFromDataTable()
 		UE_LOG(LogTemp, Warning, TEXT("[PickupBase] DT row not found: %s"),
 			*PickupWeaponID.ToString());
 		return;
+	}
+
+	// DT Category 로 PickupKind 자동 결정 (BP Class Default 무시)
+	if (Data->Category == EWeaponType::Ammo)
+	{
+		PickupKind = EPickupKind::Ammo;
+	}
+	else if (Data->Category == EWeaponType::Throwable)
+	{
+		PickupKind = EPickupKind::Throwable;
+	}
+	else
+	{
+		PickupKind = EPickupKind::Weapon;
 	}
 
 	switch (Data->Category)
@@ -115,7 +188,13 @@ void APickupBase::RefreshFromDataTable()
 		{
 			PickupSkeletalMesh->SetSkeletalMesh(Data->WeaponMesh3P);
 			PickupSkeletalMesh->SetRelativeScale3D(Data->MeshScale);
-			PickupSkeletalMesh->SetRelativeRotation(Data->MeshRotation);
+
+			// 픽업 표시 전용 회전: BP 절대값 우선, false 면 DT MeshRotation (손 장착용)
+			const FRotator FinalRot = bUsePickupAbsoluteRotation
+				? PickupAbsoluteRotation
+				: Data->MeshRotation;
+			PickupSkeletalMesh->SetRelativeRotation(FinalRot);
+
 			PickupSkeletalMesh->SetRelativeLocation(Data->MeshLocationOffset);
 			PickupSkeletalMesh->SetVisibility(Data->WeaponMesh3P != nullptr);
 		}
@@ -129,6 +208,12 @@ void APickupBase::RefreshFromDataTable()
 
 	UE_LOG(LogTemp, Verbose, TEXT("[PickupBase] Refreshed: %s, Kind: %d"),
 		*PickupWeaponID.ToString(), (int32)PickupKind);
+
+	// 모든 메시/회전/PickupKind 설정 후 정확한 종류별 Offset 으로 바닥 snap
+	if (HasAuthority())
+	{
+		SnapToGround();
+	}
 }
 
 void APickupBase::OnInteract(ACharacter* Interactor)
@@ -161,8 +246,13 @@ void APickupBase::OnInteract(ACharacter* Interactor)
 		break;
 
 	case EPickupKind::Throwable:
-		TestChar->AddGrenade(PickupWeaponID);
-		bConsumed = true;
+		// helper 직접 호출(서버 권한): 풀(MaxGrenadeCount) 도달 시 false → 픽업 미파괴
+		bConsumed = TestChar->TryAddGrenadeAuth(PickupWeaponID);
+		if (!bConsumed)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[Pickup] Grenade stock full for %s, pickup not consumed"),
+				*PickupWeaponID.ToString());
+		}
 		break;
 
 	case EPickupKind::Ammo:

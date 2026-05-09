@@ -87,6 +87,17 @@ void AWeaponTestCharacter::BeginPlay()
 		if (!PistolWeaponID.IsNone())  { WeaponSlots[(int32)EWeaponSlotType::Pistol]    = PistolWeaponID; }
 		if (!GrenadeWeaponID.IsNone()) { WeaponSlots[(int32)EWeaponSlotType::Throwable] = GrenadeWeaponID; }
 		ActiveSlotIndex = (int32)EWeaponSlotType::Main1;
+
+		// 종류별 수류탄 인벤토리 시드 (GrenadeWeaponID/GrenadeCount는 시드 전용)
+		if (!GrenadeWeaponID.IsNone() && GrenadeCount > 0)
+		{
+			FGrenadeStockEntry Seed;
+			Seed.GrenadeID = GrenadeWeaponID;
+			Seed.Count = FMath::Clamp(GrenadeCount, 0, MaxGrenadeCount);
+			GrenadeStock.Add(Seed);
+
+			ActiveGrenadeID = GrenadeWeaponID;
+		}
 	}
 
 	// 기본 무기 AR로 시작
@@ -353,14 +364,17 @@ void AWeaponTestCharacter::StopFire()
 		StopThrowableAim();
 		ThrowGrenade();
 
-		if (GrenadeCount <= 0)
+		// ThrowGrenade는 서버에서만 실제 차감을 수행. 클라이언트는 SSOT가 OnRep으로 갱신됨.
+		// 여기서는 보유 총량 0이면 무기 모드로 복귀(시각만 즉시 반응).
+		if (GetTotalGrenadeCount() <= 0)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left, switching back to weapon"));
 			SwitchWeaponByID(!LastWeaponID.IsNone() ? LastWeaponID : ARWeaponID);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[Slot] Grenade thrown, remaining: %d"), GrenadeCount);
+			UE_LOG(LogTemp, Warning, TEXT("[Slot] Grenade thrown, remaining total: %d"),
+				GetTotalGrenadeCount());
 		}
 		return;
 	}
@@ -485,23 +499,139 @@ void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
 
 void AWeaponTestCharacter::AddGrenade(FName GrenadeID)
 {
-	if (!HasAuthority()) return;
+	// Backwards-compat 진입점: 활성 종류 변신 버그 제거를 위해 helper로 위임
+	if (HasAuthority())
+	{
+		TryAddGrenadeAuth(GrenadeID);
+	}
+}
 
+// ==================== Grenade Stock Helpers ====================
+int32 AWeaponTestCharacter::GetGrenadeCountByID(FName GrenadeID) const
+{
+	for (const FGrenadeStockEntry& E : GrenadeStock)
+	{
+		if (E.GrenadeID == GrenadeID) return E.Count;
+	}
+	return 0;
+}
+
+int32 AWeaponTestCharacter::GetTotalGrenadeCount() const
+{
+	int32 Total = 0;
+	for (const FGrenadeStockEntry& E : GrenadeStock) Total += E.Count;
+	return Total;
+}
+
+bool AWeaponTestCharacter::IsGrenadeStockFull(FName GrenadeID) const
+{
+	return GetGrenadeCountByID(GrenadeID) >= MaxGrenadeCount;
+}
+
+TArray<FName> AWeaponTestCharacter::GetAvailableGrenadeIDs() const
+{
+	TArray<FName> Out;
+	for (const FGrenadeStockEntry& E : GrenadeStock)
+	{
+		if (E.Count > 0) Out.Add(E.GrenadeID);
+	}
+	return Out;
+}
+
+FName AWeaponTestCharacter::GetNextGrenadeIDInCycle() const
+{
+	const TArray<FName> Avail = GetAvailableGrenadeIDs();
+	if (Avail.Num() == 0) return NAME_None;
+	const int32 Idx = Avail.IndexOfByKey(ActiveGrenadeID);
+	return Avail[(Idx == INDEX_NONE ? 0 : (Idx + 1) % Avail.Num())];
+}
+
+bool AWeaponTestCharacter::AddGrenadeStock(FName GrenadeID, int32 Amount)
+{
+	if (GrenadeID.IsNone() || Amount <= 0) return false;
+	if (IsGrenadeStockFull(GrenadeID))      return false;
+
+	for (FGrenadeStockEntry& E : GrenadeStock)
+	{
+		if (E.GrenadeID == GrenadeID)
+		{
+			E.Count = FMath::Min(E.Count + Amount, MaxGrenadeCount);
+			return true;
+		}
+	}
+	FGrenadeStockEntry NewEntry;
+	NewEntry.GrenadeID = GrenadeID;
+	NewEntry.Count = FMath::Min(Amount, MaxGrenadeCount);
+	GrenadeStock.Add(NewEntry);
+	return true;
+}
+
+bool AWeaponTestCharacter::RemoveGrenadeStock(FName GrenadeID, int32 Amount)
+{
+	if (GrenadeID.IsNone() || Amount <= 0) return false;
+	for (int32 i = 0; i < GrenadeStock.Num(); ++i)
+	{
+		if (GrenadeStock[i].GrenadeID == GrenadeID)
+		{
+			GrenadeStock[i].Count = FMath::Max(0, GrenadeStock[i].Count - Amount);
+			// 0이어도 항목은 보존(다른 종류 cycle 안정성). 빈 항목 정리는 여기 안 함.
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AWeaponTestCharacter::TryAddGrenadeAuth(FName GrenadeID)
+{
+	if (!HasAuthority())
+	{
+		return false;
+	}
 	if (GrenadeID.IsNone())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[Grenade] AddGrenade: invalid ID"));
-		return;
+		UE_LOG(LogTemp, Warning, TEXT("[Grenade] TryAddGrenadeAuth: invalid ID"));
+		return false;
 	}
-
-	if (GrenadeWeaponID != GrenadeID)
+	if (IsGrenadeStockFull(GrenadeID))
 	{
-		GrenadeWeaponID = GrenadeID;
+		UE_LOG(LogTemp, Log, TEXT("[Grenade] TryAddGrenadeAuth: %s full (%d/%d), refused"),
+			*GrenadeID.ToString(), GetGrenadeCountByID(GrenadeID), MaxGrenadeCount);
+		return false;
 	}
 
-	GrenadeCount = FMath::Min(GrenadeCount + 1, MaxGrenadeCount);
+	const bool bAdded = AddGrenadeStock(GrenadeID, 1);
+	if (!bAdded) return false;
 
-	UE_LOG(LogTemp, Log, TEXT("[Grenade] AddGrenade: %s, count = %d/%d"),
-		*GrenadeID.ToString(), GrenadeCount, MaxGrenadeCount);
+	// 활성 종류가 비어있을 때만 갱신. 보유 중이면 ActiveGrenadeID 유지.
+	if (ActiveGrenadeID.IsNone() || GetGrenadeCountByID(ActiveGrenadeID) == 0)
+	{
+		ActiveGrenadeID = GrenadeID;
+		if (WeaponSlots.IsValidIndex((int32)EWeaponSlotType::Throwable))
+		{
+			WeaponSlots[(int32)EWeaponSlotType::Throwable] = GrenadeID;
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[Grenade] TryAddGrenadeAuth: %s, count = %d/%d (Active: %s)"),
+		*GrenadeID.ToString(), GetGrenadeCountByID(GrenadeID), MaxGrenadeCount,
+		*ActiveGrenadeID.ToString());
+	return true;
+}
+
+void AWeaponTestCharacter::SwitchToFirstAvailableSlot()
+{
+	if (!HasAuthority()) return;
+	for (int32 i = 0; i < WeaponSlots.Num(); ++i)
+	{
+		if (i == (int32)EWeaponSlotType::Throwable) continue;
+		if (!WeaponSlots[i].IsNone())
+		{
+			SwitchToSlot_Internal(i);
+			return;
+		}
+	}
+	// 보유 무기 전무: ActiveSlotIndex만 -1로 정리
+	ActiveSlotIndex = -1;
 }
 
 // ==================== 4슬롯 무기 시스템 ====================
@@ -536,26 +666,48 @@ EWeaponSlotType AWeaponTestCharacter::GetSlotForCategory(EWeaponType WeaponCateg
 
 void AWeaponTestCharacter::SwitchToSlot_Internal(int32 SlotIndex)
 {
-	if (IsSlotEmpty(SlotIndex)) return;
-
-	ActiveSlotIndex = SlotIndex;
-
 	if (SlotIndex == (int32)EWeaponSlotType::Throwable)
 	{
-		// 옵션 X: 기존 Grenade 모드 재활용 — 옛 SwitchToGrenade 본체 인라인
-		// GrenadeWeaponID를 슬롯 값으로 동기화
-		GrenadeWeaponID = WeaponSlots[SlotIndex];
-
-		if (CurrentSlot == EEquippedSlot::Grenade)
-		{
-			// 이미 Grenade 모드 — 재진입 무시
-			return;
-		}
-
-		if (GrenadeCount <= 0)
+		// 보유 0이면 진입 거부
+		if (GetTotalGrenadeCount() <= 0)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left!"));
 			return;
+		}
+
+		// 4번 슬롯 재진입 = 다음 종류로 사이클
+		if (CurrentSlot == EEquippedSlot::Grenade && ActiveSlotIndex == SlotIndex)
+		{
+			const FName Next = GetNextGrenadeIDInCycle();
+			if (!Next.IsNone() && Next != ActiveGrenadeID)
+			{
+				ActiveGrenadeID = Next;
+				if (WeaponSlots.IsValidIndex(SlotIndex))
+				{
+					WeaponSlots[SlotIndex] = Next;
+				}
+				UE_LOG(LogTemp, Warning, TEXT("[Slot] Cycled active grenade -> %s"),
+					*Next.ToString());
+			}
+			return;
+		}
+
+		// ActiveGrenadeID 보정: 비었거나 카운트 0인 종류면 첫 보유 종류로 고정
+		if (ActiveGrenadeID.IsNone() || GetGrenadeCountByID(ActiveGrenadeID) == 0)
+		{
+			const TArray<FName> Avail = GetAvailableGrenadeIDs();
+			if (Avail.Num() > 0)
+			{
+				ActiveGrenadeID = Avail[0];
+				if (WeaponSlots.IsValidIndex(SlotIndex))
+				{
+					WeaponSlots[SlotIndex] = Avail[0];
+				}
+			}
+			else
+			{
+				return;
+			}
 		}
 
 		// 현재 무기 숨기기 (Destroy 하지 말고 Hidden 처리)
@@ -565,11 +717,15 @@ void AWeaponTestCharacter::SwitchToSlot_Internal(int32 SlotIndex)
 			CurrentWeapon->SetActorHiddenInGame(true);
 		}
 
+		ActiveSlotIndex = SlotIndex;
 		CurrentSlot = EEquippedSlot::Grenade;
-		UE_LOG(LogTemp, Warning, TEXT("[Slot] Switched to Throwable slot (Count: %d)"), GrenadeCount);
+		UE_LOG(LogTemp, Warning, TEXT("[Slot] Switched to Throwable slot (Active: %s, %d)"),
+			*ActiveGrenadeID.ToString(), GetGrenadeCountByID(ActiveGrenadeID));
 	}
 	else
 	{
+		if (IsSlotEmpty(SlotIndex)) return;
+		ActiveSlotIndex = SlotIndex;
 		SwitchWeaponByID(WeaponSlots[SlotIndex]);
 	}
 }
@@ -589,7 +745,7 @@ void AWeaponTestCharacter::SpawnPickupFromSlot(int32 SlotIndex)
 	Params.Owner = this;
 
 	APickupBase* Pickup = GetWorld()->SpawnActor<APickupBase>(
-		PickupClass, Location, FRotator::ZeroRotator, Params);
+		PickupClass, Location, FRotator(0.f, GetActorRotation().Yaw, 0.f), Params);
 
 	if (Pickup)
 	{
@@ -603,7 +759,16 @@ void AWeaponTestCharacter::ServerSwitchToSlot_Implementation(int32 SlotIndex)
 {
 	if (!HasAuthority()) return;
 	if (SlotIndex < 0 || SlotIndex >= WeaponSlots.Num()) return;
-	if (IsSlotEmpty(SlotIndex)) return;
+
+	// Throwable 슬롯은 WeaponSlots[3] 비어 있어도 보유 카운트로 진입 판단
+	if (SlotIndex == (int32)EWeaponSlotType::Throwable)
+	{
+		if (GetTotalGrenadeCount() <= 0) return;
+	}
+	else
+	{
+		if (IsSlotEmpty(SlotIndex)) return;
+	}
 	SwitchToSlot_Internal(SlotIndex);
 }
 
@@ -653,11 +818,8 @@ void AWeaponTestCharacter::ServerAddWeaponToSlot_Implementation(FName WeaponID)
 	}
 	else if (Category == EWeaponType::Throwable)
 	{
-		TargetSlot = (int32)EWeaponSlotType::Throwable;
-		// 카운트 증가는 기존 AddGrenade 패턴 호출
-		AddGrenade(WeaponID);
-		// 슬롯에 ID만 세팅하고 자동전환 없이 반환
-		WeaponSlots[TargetSlot] = WeaponID;
+		// helper에 모든 결정권 위임 (풀 거부, 활성 종류 보존, 슬롯 갱신)
+		TryAddGrenadeAuth(WeaponID);
 		return;
 	}
 	else  // Main 카테고리 (Rifle / Shotgun / Sniper)
@@ -707,11 +869,12 @@ void AWeaponTestCharacter::ServerDropCurrentWeapon_Implementation()
 	const int32 DroppedSlot = ActiveSlotIndex;
 	WeaponSlots[DroppedSlot] = NAME_None;
 
-	// Throwable 슬롯이었으면 GrenadeCount도 0으로 초기화
+	// Throwable 슬롯이었으면 SSOT(GrenadeStock/ActiveGrenadeID)도 함께 비움
+	// (드롭 동작 자체는 기존 그대로. Step 12 신규 드롭 로직은 후속 plan에서 처리)
 	if (DroppedSlot == (int32)EWeaponSlotType::Throwable)
 	{
-		GrenadeCount = 0;
-		GrenadeWeaponID = NAME_None;
+		GrenadeStock.Empty();
+		ActiveGrenadeID = NAME_None;
 	}
 
 	const int32 NextSlot = FindNextAvailableSlot(DroppedSlot);
@@ -759,7 +922,7 @@ FVector AWeaponTestCharacter::GetAimDirection() const
 
 void AWeaponTestCharacter::ThrowGrenade()
 {
-	if (GrenadeCount <= 0)
+	if (ActiveGrenadeID.IsNone() || GetGrenadeCountByID(ActiveGrenadeID) <= 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Grenade] No grenades left!"));
 		return;
@@ -786,19 +949,52 @@ void AWeaponTestCharacter::ThrowGrenade()
 	AThrowableBase* Grenade = GetWorld()->SpawnActor<AThrowableBase>(
 		GenericThrowableClass, SpawnLocation, SpawnRotation, SpawnParams);
 
-	if (Grenade)
+	if (!Grenade)
 	{
-		// DataTable에서 수류탄 데이터 로드
-		Grenade->InitFromDataTable(GrenadeWeaponID);
+		return;
+	}
 
-		FVector ThrowDirection = CameraRotation.Vector();
-		ThrowDirection.Z += 0.2f;
-		ThrowDirection.Normalize();
+	// DataTable에서 수류탄 데이터 로드 — 활성 종류 기준
+	Grenade->InitFromDataTable(ActiveGrenadeID);
 
-		Grenade->ServerThrow(ThrowDirection);
-		GrenadeCount--;
+	FVector ThrowDirection = CameraRotation.Vector();
+	ThrowDirection.Z += 0.2f;
+	ThrowDirection.Normalize();
 
-		UE_LOG(LogTemp, Warning, TEXT("[Grenade] Thrown! Remaining: %d"), GrenadeCount);
+	Grenade->ServerThrow(ThrowDirection);
+
+	// 서버 권한에서만 카운트 차감 (서버에서 호출되는 경로 + 클라이언트 임시 차감 회피)
+	if (HasAuthority())
+	{
+		const FName ThrownID = ActiveGrenadeID;
+		RemoveGrenadeStock(ThrownID, 1);
+
+		const int32 Remaining = GetGrenadeCountByID(ThrownID);
+		UE_LOG(LogTemp, Warning, TEXT("[Grenade] Thrown! %s remaining: %d"),
+			*ThrownID.ToString(), Remaining);
+
+		if (Remaining == 0)
+		{
+			const FName Next = GetNextGrenadeIDInCycle();
+			if (!Next.IsNone() && Next != ThrownID)
+			{
+				ActiveGrenadeID = Next;
+				if (WeaponSlots.IsValidIndex((int32)EWeaponSlotType::Throwable))
+				{
+					WeaponSlots[(int32)EWeaponSlotType::Throwable] = Next;
+				}
+			}
+			else
+			{
+				// 모두 0
+				ActiveGrenadeID = NAME_None;
+				if (WeaponSlots.IsValidIndex((int32)EWeaponSlotType::Throwable))
+				{
+					WeaponSlots[(int32)EWeaponSlotType::Throwable] = NAME_None;
+				}
+				SwitchToFirstAvailableSlot();
+			}
+		}
 	}
 }
 
@@ -806,7 +1002,7 @@ void AWeaponTestCharacter::ThrowGrenade()
 
 bool AWeaponTestCharacter::IsCurrentWeaponThrowable() const
 {
-	return CurrentSlot == EEquippedSlot::Grenade && GrenadeCount > 0;
+	return CurrentSlot == EEquippedSlot::Grenade && GetTotalGrenadeCount() > 0;
 }
 
 void AWeaponTestCharacter::StartThrowableAim()
@@ -839,8 +1035,14 @@ void AWeaponTestCharacter::UpdateThrowableAimPreview()
 		return;
 	}
 
+	const FName PreviewID = !ActiveGrenadeID.IsNone() ? ActiveGrenadeID : GrenadeWeaponID;
+	if (PreviewID.IsNone())
+	{
+		return;
+	}
+
 	FWeaponData* Data = ThrowableCDO->WeaponDataTable->FindRow<FWeaponData>(
-		GrenadeWeaponID, TEXT("ThrowableAimPreview"));
+		PreviewID, TEXT("ThrowableAimPreview"));
 	if (!Data)
 	{
 		return;
@@ -905,12 +1107,14 @@ void AWeaponTestCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, LightAmmo,      COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, HeavyAmmo,      COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, EnergyAmmo,     COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ShotgunAmmo,    COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, WeaponSlots,    COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, LightAmmo,       COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, HeavyAmmo,       COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, EnergyAmmo,      COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ShotgunAmmo,     COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, WeaponSlots,     COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ActiveSlotIndex, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, GrenadeStock,    COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ActiveGrenadeID, COND_OwnerOnly);
 }
 
 // ==================== Ammo Pool ====================

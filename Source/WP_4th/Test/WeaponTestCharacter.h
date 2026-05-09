@@ -77,6 +77,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Weapons")
 	FName ShotgunWeaponID = "Peacekeeper";
 
+	// BeginPlay 초기 종류 시드 (런타임 SSOT는 ActiveGrenadeID/GrenadeStock)
 	UPROPERTY(EditAnywhere, Category = "Weapons")
 	FName GrenadeWeaponID = "FragGrenade";
 
@@ -84,11 +85,19 @@ public:
 	UPROPERTY()
 	FName LastWeaponID = "R301";
 
+	// BeginPlay 초기 카운트 시드 (런타임 SSOT는 GrenadeStock)
 	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
 	int32 GrenadeCount = 2;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapons")
 	int32 MaxGrenadeCount = 3;
+
+	// === 종류별 수류탄 인벤토리 (런타임 SSOT) ===
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Grenade")
+	TArray<FGrenadeStockEntry> GrenadeStock;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Grenade")
+	FName ActiveGrenadeID = NAME_None;
 
 	// ========== Input Actions ==========
 	UPROPERTY(EditAnywhere, Category = "Input")
@@ -161,6 +170,30 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Pickup")
 	void AddGrenade(FName GrenadeID);
+
+	// === Grenade Stock Helpers ===
+	UFUNCTION(BlueprintPure, Category = "Grenade")
+	int32 GetGrenadeCountByID(FName GrenadeID) const;
+
+	UFUNCTION(BlueprintPure, Category = "Grenade")
+	int32 GetTotalGrenadeCount() const;
+
+	UFUNCTION(BlueprintPure, Category = "Grenade")
+	bool IsGrenadeStockFull(FName GrenadeID) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Grenade")
+	TArray<FName> GetAvailableGrenadeIDs() const;
+
+	UFUNCTION(BlueprintPure, Category = "Grenade")
+	FName GetNextGrenadeIDInCycle() const;
+
+	// authority-only mutators
+	bool AddGrenadeStock(FName GrenadeID, int32 Amount);
+	bool RemoveGrenadeStock(FName GrenadeID, int32 Amount = 1);
+
+	// 통합 픽업 진입점 (RPC + PickupBase 양쪽이 호출)
+	UFUNCTION(BlueprintCallable, Category = "Grenade")
+	bool TryAddGrenadeAuth(FName GrenadeID);
 
 	// ========== Ammo Pool (4 종 개별 — TMap 복제 미지원 회피) ==========
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
@@ -284,6 +317,7 @@ protected:
 	EWeaponSlotType GetSlotForCategory(EWeaponType Category) const;
 	void SwitchToSlot_Internal(int32 SlotIndex);
 	void SpawnPickupFromSlot(int32 SlotIndex);
+	void SwitchToFirstAvailableSlot();
 
 	// === WP4-37/38 ===
 	void StartThrowableAim();

@@ -125,7 +125,7 @@ void APickupSpawnManager::SpawnAllPickups()
 					 && Data->Category != EWeaponType::None);
 				if (bIsActualWeapon)
 				{
-					AmmoSpawned += SpawnAmmoNearWeapon(Pickup->GetActorLocation(), Data->AmmoType);
+					AmmoSpawned += SpawnAmmoNearWeapon(Pickup->GetActorLocation(), Rot, Data->AmmoType);
 				}
 			}
 		}
@@ -148,7 +148,7 @@ FName APickupSpawnManager::GetAmmoPickupRowNameFromAmmoType(EAmmoType Type)
 	}
 }
 
-int32 APickupSpawnManager::SpawnAmmoNearWeapon(const FVector& WeaponLocation, EAmmoType AmmoType)
+int32 APickupSpawnManager::SpawnAmmoNearWeapon(const FVector& WeaponLocation, const FRotator& WeaponRotation, EAmmoType AmmoType)
 {
 	if (!WeaponDataTable || !PickupClass)
 	{
@@ -181,22 +181,21 @@ int32 APickupSpawnManager::SpawnAmmoNearWeapon(const FVector& WeaponLocation, EA
 	UE_LOG(LogTemp, Log, TEXT("[SpawnManager] Spawning %d ammo pickups (%s) near weapon"),
 		RequestedCount, *AmmoRowName.ToString());
 
+	// 무기 우측 방향 (회전 반영). 회전 0 이면 World +Y
+	const FVector RightDir = WeaponRotation.RotateVector(FVector::RightVector);
+
 	int32 SpawnedThisGroup = 0;
 	for (int32 i = 0; i < RequestedCount; ++i)
 	{
-		const float Radius = AmmoGroupSpawnRadius;
-		const FVector RandomOffset(
-			FMath::RandRange(-Radius, Radius),
-			FMath::RandRange(-Radius, Radius),
-			0.0f);
-		const FVector AmmoLocation = WeaponLocation + RandomOffset;
+		const float OffsetDist = AmmoDistanceFromWeapon + i * AmmoSpacingBetween;
+		const FVector AmmoLocation = WeaponLocation + RightDir * OffsetDist;
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 		APickupBase* AmmoPickup = World->SpawnActor<APickupBase>(
-			PickupClass, AmmoLocation, FRotator::ZeroRotator, SpawnParams);
+			PickupClass, AmmoLocation, WeaponRotation, SpawnParams);
 
 		if (AmmoPickup)
 		{

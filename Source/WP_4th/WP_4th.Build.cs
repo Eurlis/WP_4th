@@ -22,7 +22,9 @@ public class WP_4th : ModuleRules
 			"MotionWarping",
 			"Niagara",
 			"NiagaraCore",
-            "CableComponent"
+            "CableComponent",
+            "OnlineSubsystem",
+            "OnlineSubsystemUtils"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "AnimGraphRuntime", "CableComponent", "CableComponent" });
@@ -36,7 +38,9 @@ public class WP_4th : ModuleRules
 			"WP_4th/Weapon",
 			"WP_4th/Test",
             "WP_4th/Zipline",
-            "WP_4th/Character/Components/ZiplineComp"
+            "WP_4th/Character/Components/ZiplineComp",
+            "WP_4th/Core",
+            "WP_4th/Network"
 
 		});
 
