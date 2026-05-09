@@ -745,7 +745,7 @@ void AWeaponTestCharacter::SpawnPickupFromSlot(int32 SlotIndex)
 	Params.Owner = this;
 
 	APickupBase* Pickup = GetWorld()->SpawnActor<APickupBase>(
-		PickupClass, Location, FRotator::ZeroRotator, Params);
+		PickupClass, Location, FRotator(0.f, GetActorRotation().Yaw, 0.f), Params);
 
 	if (Pickup)
 	{
