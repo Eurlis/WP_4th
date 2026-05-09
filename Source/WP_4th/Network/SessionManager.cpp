@@ -125,7 +125,8 @@ void USessionManager::FindSessions(int32 MaxResults)
 	SessionSearch = MakeShared<FOnlineSessionSearch>();
 	SessionSearch->MaxSearchResults = FMath::Max(1, MaxResults);
 	SessionSearch->bIsLanQuery = true;
-	SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
+	// SEARCH_PRESENCE: Null Subsystem + LAN 환경에서는 불필요 (UE 5.7 헤더 위치 변경 회피)
+	// SessionSearch->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
 
 	if (FindHandle.IsValid())
 	{
