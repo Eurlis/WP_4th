@@ -61,11 +61,16 @@ public:
 	UFUNCTION(Server, Reliable, WithValidation)
 	void ServerThrow(FVector ThrowDirection);
 
-	UFUNCTION(NetMulticast, Unreliable)
+	// Reliable: 폭발 직후 SetLifeSpan으로 액터가 사라지기 전에 클라이언트가 반드시 받도록 보장
+	UFUNCTION(NetMulticast, Reliable)
 	void MulticastExplosionEffects(FVector ExplosionLocation, FVector ThrowDir);
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayThrowSound();
+
+	// 모든 인스턴스에 PickupMesh 충돌/가시성 + ProjectileMovement 활성화 동기화 (클라 측 freeze 방지)
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastActivateProjectile(FVector InitialVelocity);
 
 	// ArcStar 부착 이펙트 (부착 후 1초 뒤 호출)
 	UFUNCTION(NetMulticast, Reliable)

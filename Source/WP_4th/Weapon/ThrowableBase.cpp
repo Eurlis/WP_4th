@@ -138,35 +138,19 @@ void AThrowableBase::ServerThrow_Implementation(FVector ThrowDirection)
 	       (int32)PickupMesh->GetCollisionEnabled(),
 	       PickupMesh->GetStaticMesh() ? TEXT("YES") : TEXT("NO"));
 
-	// Detach from owner
+	// Detach from owner (Replicated AttachParent으로 클라이언트도 자동 detach)
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-	SetItemState(EItemState::Dropped);
-	PickupMesh->SetVisibility(true);
-	PickupMesh->SetSimulatePhysics(false);
-	PickupCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SetItemState(EItemState::Dropped);  // OnRep_ItemState가 클라 측 visibility 처리
 
-	// === 모든 수류탄 공통: Block 프로파일 (벽 통과 방지) ===
-	// PickupMesh 기본은 NoCollision (ItemBase 설정). 던진 후엔 Sweep 을 위해 Block 필요.
-	PickupMesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
-	PickupMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-	PickupMesh->SetNotifyRigidBodyCollision(true);
-
-	// 시전자 셀프 충돌 원천 차단 (모든 타입)
-	if (AActor* OwnerActor = GetOwner())
-	{
-		PickupMesh->IgnoreActorWhenMoving(OwnerActor, true);
-	}
-
-	// === Physics 파라미터 DataTable 주입 (Apex 스타일 궤적) ===
-	if (ProjectileMovement)
-	{
-		ProjectileMovement->ProjectileGravityScale = CurrentWeaponData.ThrowableGravityScale;
-		ProjectileMovement->Bounciness = CurrentWeaponData.ThrowableBounciness;
-	}
 	UE_LOG(LogTemp, Warning, TEXT("[Throw] %s - Gravity:%.2f Bounciness:%.2f"),
 	       *WeaponID.ToString(),
 	       CurrentWeaponData.ThrowableGravityScale,
 	       CurrentWeaponData.ThrowableBounciness);
+
+	// 모든 인스턴스(서버+클라)에 PickupMesh 충돌 프로파일 + ProjectileMovement Velocity/Activate 적용.
+	// 이전엔 서버에서만 직접 호출 → 클라는 ProjectileMovement 비활성 + 충돌 NoCollision 유지로 freeze.
+	const FVector LaunchVelocity = ThrowDirection.GetSafeNormal() * ThrowForce;
+	MulticastActivateProjectile(LaunchVelocity);
 
 	// === Arc Star 전용 설정 (bIsSticky=true) ===
 	if (CurrentWeaponData.bIsSticky)
@@ -216,11 +200,7 @@ void AThrowableBase::ServerThrow_Implementation(FVector ThrowDirection)
 
 	// === FragGrenade (bIsSticky=false, bIsIncendiary=false): 바운스 유지 ===
 	// 공통 BlockAllDynamic 으로 벽은 감지, ProjectileMovement 기본값(bShouldBounce=true)으로 튕김
-
-	// Activate projectile movement
-	FVector LaunchVelocity = ThrowDirection.GetSafeNormal() * ThrowForce;
-	ProjectileMovement->Velocity = LaunchVelocity;
-	ProjectileMovement->Activate();
+	// (Velocity/Activate는 위쪽 MulticastActivateProjectile에서 모든 인스턴스에 일괄 적용)
 
 	// === 던지기 사운드 (Multicast) ===
 	MulticastPlayThrowSound();
@@ -467,7 +447,9 @@ void AThrowableBase::Explode()
 		}
 
 		MulticastExplosionEffects(ExplosionLocation, ThrowDir);
-		Destroy();
+		// 즉시 Destroy하면 클라이언트가 Multicast 받기 전에 액터가 사라져 FX/Sound가 드롭됨.
+		// SetLifeSpan으로 ~0.5s 후 Destroy → Multicast 패킷 도달 시간 확보.
+		SetLifeSpan(0.5f);
 		return;
 	}
 
@@ -495,7 +477,9 @@ void AThrowableBase::Explode()
 		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	}
 
-	Destroy();
+	// 즉시 Destroy하면 클라이언트가 Multicast 받기 전에 액터가 사라져 FX/Sound가 드롭됨.
+	// SetLifeSpan으로 ~0.5s 후 Destroy → Multicast 패킷 도달 시간 확보.
+	SetLifeSpan(0.5f);
 }
 
 void AThrowableBase::MulticastExplosionEffects_Implementation(FVector ExplosionLocation, FVector ThrowDir)
@@ -562,6 +546,13 @@ void AThrowableBase::MulticastExplosionEffects_Implementation(FVector ExplosionL
 	{
 		ActiveShockFXComponent->Deactivate();
 		ActiveShockFXComponent = nullptr;
+	}
+
+	// 폭발 시점 시각 즉시 숨김 — 모든 인스턴스 동일. (서버는 SetLifeSpan(0.5s) 후 Destroy로 정리)
+	SetActorHiddenInGame(true);
+	if (PickupMesh)
+	{
+		PickupMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 }
 
@@ -631,5 +622,39 @@ void AThrowableBase::MulticastPlayThrowSound_Implementation()
 			CurrentWeaponData.ThrowSound,
 			GetActorLocation()
 		);
+	}
+}
+
+void AThrowableBase::MulticastActivateProjectile_Implementation(FVector InitialVelocity)
+{
+	// PickupMesh 충돌/가시성 — 서버+모든 클라 동일 적용
+	if (PickupMesh)
+	{
+		PickupMesh->SetVisibility(true);
+		PickupMesh->SetSimulatePhysics(false);
+		PickupMesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
+		PickupMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		PickupMesh->SetNotifyRigidBodyCollision(true);
+
+		// 시전자 셀프 충돌 차단 (Owner는 Replicated이므로 클라에서도 동일)
+		if (AActor* OwnerActor = GetOwner())
+		{
+			PickupMesh->IgnoreActorWhenMoving(OwnerActor, true);
+		}
+	}
+
+	// PickupCollision (픽업 트리거)는 던진 직후 비활성
+	if (PickupCollision)
+	{
+		PickupCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// ProjectileMovement: 데이터테이블 물리 파라미터 + 초기 속도 적용 후 활성화
+	if (ProjectileMovement)
+	{
+		ProjectileMovement->ProjectileGravityScale = CurrentWeaponData.ThrowableGravityScale;
+		ProjectileMovement->Bounciness = CurrentWeaponData.ThrowableBounciness;
+		ProjectileMovement->Velocity = InitialVelocity;
+		ProjectileMovement->Activate();
 	}
 }
