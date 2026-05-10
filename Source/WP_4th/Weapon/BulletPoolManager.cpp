@@ -3,12 +3,19 @@
 #include "BulletPoolManager.h"
 #include "ProjectileBase.h"
 #include "BulletProjectile.h"
+#include "Components/SceneComponent.h"
 #include "Engine/World.h"
 
 ABulletPoolManager::ABulletPoolManager()
 {
 	PrimaryActorTick.bCanEverTick = false;
+
+	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+	RootComponent = SceneRoot;
+
 	bReplicates = true;
+	bAlwaysRelevant = true;
+	SetReplicateMovement(false);
 
 	ProjectileClass = ABulletProjectile::StaticClass();
 	PoolSize = 50;

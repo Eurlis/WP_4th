@@ -230,6 +230,9 @@ protected:
 	FVector CachedBurstMuzzle = FVector::ZeroVector;
 	FVector CachedBurstDir = FVector::ForwardVector;
 
+	// OnRep 중복 가드: InitFromDataTable이 마지막으로 적용한 ID — 같은 값이면 재초기화 skip
+	FName LastInitializedWeaponID = NAME_None;
+
 	// Recoil accumulation (local)
 	float CurrentRecoilPitch;
 	float CurrentRecoilYaw;

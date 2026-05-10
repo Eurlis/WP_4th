@@ -49,15 +49,29 @@ public:
 	USkeletalMeshComponent* Mesh1P;
 
 	// ========== Weapons ==========
-	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentWeapon, BlueprintReadOnly, Category = "Weapon")
 	AWeaponBase* CurrentWeapon;
+
+	// 직전에 장착했던 무기 — OnRep에서 detach/숨김 처리용 (UPROPERTY로 GC 추적)
+	UPROPERTY()
+	AWeaponBase* PreviousWeapon = nullptr;
+
+	UFUNCTION()
+	void OnRep_CurrentWeapon();
 
 	/** BP에서 HUD 갱신 등에 사용하는 무기 장착 이벤트 (CurrentWeapon이 set된 후 호출) */
 	UFUNCTION(BlueprintImplementableEvent, Category = "Weapon|Events", meta = (DisplayName = "On Weapon Equipped"))
 	void BP_OnWeaponEquipped(AWeaponBase* NewWeapon);
 
-	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentSlot, BlueprintReadOnly, Category = "Weapon")
 	EEquippedSlot CurrentSlot = EEquippedSlot::Weapon;
+
+	// CurrentSlot OnRep에서 전이 방향 (들어옴/나감) 판별용
+	UPROPERTY()
+	EEquippedSlot PreviousSlot = EEquippedSlot::Weapon;
+
+	UFUNCTION()
+	void OnRep_CurrentSlot();
 
 	// BP_Weapon_Generic (WeaponBase 상속 BP 하나)
 	UPROPERTY(EditAnywhere, Category = "Weapons")
@@ -293,6 +307,10 @@ public:
 	UFUNCTION(Server, Reliable) void ServerAddWeaponToSlot(FName WeaponID);
 	UFUNCTION(Server, Reliable) void ServerDropCurrentWeapon();
 
+	// 클라 → 서버 수류탄 throw 권한 위임 (클라 로컬 SpawnActor ghost 회피)
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerThrowGrenade(FVector ThrowDirection);
+
 protected:
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
@@ -318,6 +336,9 @@ protected:
 	void SwitchToSlot_Internal(int32 SlotIndex);
 	void SpawnPickupFromSlot(int32 SlotIndex);
 	void SwitchToFirstAvailableSlot();
+
+	// 서버 SwitchWeaponByID + 클라 OnRep_CurrentWeapon 양쪽에서 호출하는 부착/가시성 헬퍼
+	void ApplyWeaponVisuals(AWeaponBase* Weapon);
 
 	// === WP4-37/38 ===
 	void StartThrowableAim();

@@ -7,6 +7,7 @@
 #include "BulletPoolManager.generated.h"
 
 class AProjectileBase;
+class USceneComponent;
 
 UCLASS()
 class WP_4TH_API ABulletPoolManager : public AActor
@@ -20,6 +21,9 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Pool")
+	TObjectPtr<USceneComponent> SceneRoot;
+
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pool")
 	TSubclassOf<AProjectileBase> ProjectileClass;
 

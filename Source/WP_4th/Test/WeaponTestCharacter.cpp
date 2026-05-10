@@ -100,8 +100,11 @@ void AWeaponTestCharacter::BeginPlay()
 		}
 	}
 
-	// 기본 무기 AR로 시작
-	SwitchWeaponByID(ARWeaponID);
+	// 기본 무기 AR로 시작 — 서버 권한만. 클라는 WeaponID OnRep 경로로 무기를 받음.
+	if (HasAuthority())
+	{
+		SwitchWeaponByID(ARWeaponID);
+	}
 
 	// 카메라 기본 FOV 적용
 	if (FirstPersonCamera)
@@ -364,14 +367,10 @@ void AWeaponTestCharacter::StopFire()
 		StopThrowableAim();
 		ThrowGrenade();
 
-		// ThrowGrenade는 서버에서만 실제 차감을 수행. 클라이언트는 SSOT가 OnRep으로 갱신됨.
-		// 여기서는 보유 총량 0이면 무기 모드로 복귀(시각만 즉시 반응).
-		if (GetTotalGrenadeCount() <= 0)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left, switching back to weapon"));
-			SwitchWeaponByID(!LastWeaponID.IsNone() ? LastWeaponID : ARWeaponID);
-		}
-		else
+		// 빈손 전환은 서버 ThrowGrenade가 SwitchToFirstAvailableSlot으로 권한 처리.
+		// 클라는 CurrentWeapon OnRep으로 받음 — 여기선 로컬 SwitchWeaponByID 호출 안 함.
+		// (이전엔 LastWeaponID 폴백이 클라에서 ghost weapon을 만드는 버그가 있었음)
+		if (GetTotalGrenadeCount() > 0)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[Slot] Grenade thrown, remaining total: %d"),
 				GetTotalGrenadeCount());
@@ -458,43 +457,107 @@ void AWeaponTestCharacter::SwitchWeaponByID(FName WeaponID)
 	SpawnParams.Instigator = this;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(GenericWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
-	if (!CurrentWeapon) return;
+	// 로컬 변수에 잡아두고 사용 — 후속 사이드 이펙트(델리게이트 broadcast 등)가 멤버 CurrentWeapon을 nullify해도
+	// BP_OnWeaponEquipped에 전달되는 포인터는 보장됨.
+	AWeaponBase* NewWeapon = GetWorld()->SpawnActor<AWeaponBase>(
+		GenericWeaponClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+	if (!NewWeapon) return;
+
+	CurrentWeapon = NewWeapon;  // ReplicatedUsing → 클라 OnRep_CurrentWeapon
 
 	// DataTable에서 데이터 로드
-	CurrentWeapon->InitFromDataTable(WeaponID);
+	NewWeapon->InitFromDataTable(WeaponID);
 
-	CurrentWeapon->AttachToComponent(
-		FirstPersonCamera,
-		FAttachmentTransformRules::SnapToTargetIncludingScale,
-		NAME_None);
+	// 비주얼/부착 (서버 측). 클라는 OnRep_CurrentWeapon에서 동일 헬퍼로 처리됨.
+	ApplyWeaponVisuals(NewWeapon);
 
-	CurrentWeapon->SetActorRelativeLocation(FVector(30.0f, 15.0f, -10.0f));
-	CurrentWeapon->SetActorRelativeRotation(FRotator(0.0f, 0.0f, 0.0f));
-
-	CurrentWeapon->OwningCharacter = this;
-	CurrentWeapon->OnEquipped();
-
-	if (CurrentWeapon->WeaponMesh1P)
+	// OnEquipped: 멀티캐스트 사운드 + 델리게이트 broadcast.
+	// 부작용으로 1P/3P 가시성을 둘 다 true로 되돌리므로 3P 한 번 더 숨김.
+	NewWeapon->OnEquipped();
+	if (NewWeapon->WeaponMesh3P)
 	{
-		CurrentWeapon->WeaponMesh1P->SetVisibility(true);
-		CurrentWeapon->WeaponMesh1P->SetOnlyOwnerSee(false);
-	}
-	if (CurrentWeapon->WeaponMesh3P)
-	{
-		CurrentWeapon->WeaponMesh3P->SetVisibility(false);
+		NewWeapon->WeaponMesh3P->SetVisibility(false);
 	}
 
 	// 마지막 무기 기억
 	LastWeaponID = WeaponID;
+	PreviousWeapon = NewWeapon;
 
-	UE_LOG(LogTemp, Warning, TEXT("[TestChar] Weapon switched to: %s"), *WeaponID.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("[TestChar] Weapon switched to: %s (NewWeapon=%s, CurrentWeapon=%s)"),
+		*WeaponID.ToString(), *GetNameSafe(NewWeapon), *GetNameSafe(CurrentWeapon));
 
-	// HUD 위젯 등 BP 측 갱신
+	// HUD 위젯 등 BP 측 갱신 (서버 자기자신; 클라는 OnRep_CurrentWeapon에서 호출).
+	// 멤버가 아닌 로컬 변수 전달 — 멤버가 어떤 이유로 nullify되어도 BP는 valid 포인터 받음.
+	BP_OnWeaponEquipped(NewWeapon);
+}
+
+// ==================== Weapon Visuals & OnRep ====================
+
+void AWeaponTestCharacter::ApplyWeaponVisuals(AWeaponBase* Weapon)
+{
+	if (!Weapon || !FirstPersonCamera) return;
+
+	Weapon->AttachToComponent(
+		FirstPersonCamera,
+		FAttachmentTransformRules::SnapToTargetIncludingScale,
+		NAME_None);
+	Weapon->SetActorRelativeLocation(FVector(30.0f, 15.0f, -10.0f));
+	Weapon->SetActorRelativeRotation(FRotator::ZeroRotator);
+
+	Weapon->OwningCharacter = this;
+
+	if (Weapon->WeaponMesh1P)
+	{
+		Weapon->WeaponMesh1P->SetVisibility(true);
+		Weapon->WeaponMesh1P->SetOnlyOwnerSee(false);
+	}
+	if (Weapon->WeaponMesh3P)
+	{
+		Weapon->WeaponMesh3P->SetVisibility(false);
+	}
+}
+
+void AWeaponTestCharacter::OnRep_CurrentWeapon()
+{
+	// 이전 무기 정리: 서버 Destroy 도달 전이거나 그냥 다른 무기로 바뀐 경우 모두 커버.
+	// (서버에서 Destroy되면 Replicated 포인터는 자동 nullptr → IsValid 가드로 안전)
+	if (IsValid(PreviousWeapon) && PreviousWeapon != CurrentWeapon)
+	{
+		if (PreviousWeapon->WeaponMesh1P) PreviousWeapon->WeaponMesh1P->SetVisibility(false);
+		if (PreviousWeapon->WeaponMesh3P) PreviousWeapon->WeaponMesh3P->SetVisibility(false);
+		PreviousWeapon->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	}
+
 	if (CurrentWeapon)
 	{
-		BP_OnWeaponEquipped(CurrentWeapon);
+		ApplyWeaponVisuals(CurrentWeapon);
 	}
+	// nullptr 케이스도 BP에 전달 — BP 측에서 HUD 클리어/숨김 처리
+	BP_OnWeaponEquipped(CurrentWeapon);
+
+	PreviousWeapon = CurrentWeapon;
+}
+
+void AWeaponTestCharacter::OnRep_CurrentSlot()
+{
+	// Grenade 슬롯 진입: 현재 무기 메시 숨김 (서버 SwitchToSlot_Internal과 동일 시각 효과)
+	if (CurrentSlot == EEquippedSlot::Grenade && PreviousSlot != EEquippedSlot::Grenade)
+	{
+		if (CurrentWeapon)
+		{
+			CurrentWeapon->SetActorHiddenInGame(true);
+		}
+	}
+	// Grenade 슬롯 이탈: 미리보기 정리. CurrentWeapon 복귀/생성은 SwitchWeaponByID + OnRep_CurrentWeapon 경로가 처리.
+	else if (CurrentSlot != EEquippedSlot::Grenade && PreviousSlot == EEquippedSlot::Grenade)
+	{
+		if (bIsAimingThrowable)
+		{
+			StopThrowableAim();
+		}
+	}
+
+	PreviousSlot = CurrentSlot;
 }
 
 void AWeaponTestCharacter::AddGrenade(FName GrenadeID)
@@ -630,8 +693,15 @@ void AWeaponTestCharacter::SwitchToFirstAvailableSlot()
 			return;
 		}
 	}
-	// 보유 무기 전무: ActiveSlotIndex만 -1로 정리
+	// 보유 무기 전무: 빈손 정리 — 숨겨진 CurrentWeapon Destroy + 서버 HUD 클리어
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->Destroy();
+		CurrentWeapon = nullptr;
+	}
+	CurrentSlot = EEquippedSlot::Weapon;
 	ActiveSlotIndex = -1;
+	BP_OnWeaponEquipped(nullptr);
 }
 
 // ==================== 4슬롯 무기 시스템 ====================
@@ -897,6 +967,8 @@ void AWeaponTestCharacter::ServerDropCurrentWeapon_Implementation()
 			StopThrowableAim();
 		}
 		ActiveSlotIndex = -1;
+		// 서버 자기 HUD 클리어 (클라는 CurrentWeapon=nullptr OnRep으로 동일 호출)
+		BP_OnWeaponEquipped(nullptr);
 	}
 }
 
@@ -922,6 +994,30 @@ FVector AWeaponTestCharacter::GetAimDirection() const
 
 void AWeaponTestCharacter::ThrowGrenade()
 {
+	// 클라/서버 공통 진입점 — 카메라 방향 계산 후 Server RPC로 권한 위임.
+	// (이전에는 클라이언트가 직접 SpawnActor → ghost actor + ServerThrow RPC 도달 불가 버그가 있었음)
+	if (!GetController()) return;
+
+	FVector CameraLocation;
+	FRotator CameraRotation;
+	GetController()->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+	FVector ThrowDirection = CameraRotation.Vector();
+	ThrowDirection.Z += 0.2f;
+	ThrowDirection.Normalize();
+
+	ServerThrowGrenade(ThrowDirection);
+}
+
+bool AWeaponTestCharacter::ServerThrowGrenade_Validate(FVector ThrowDirection)
+{
+	return !ThrowDirection.IsNearlyZero();
+}
+
+void AWeaponTestCharacter::ServerThrowGrenade_Implementation(FVector ThrowDirection)
+{
+	if (!HasAuthority()) return;
+
 	if (ActiveGrenadeID.IsNone() || GetGrenadeCountByID(ActiveGrenadeID) <= 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[Grenade] No grenades left!"));
@@ -933,6 +1029,8 @@ void AWeaponTestCharacter::ThrowGrenade()
 		UE_LOG(LogTemp, Warning, TEXT("[Grenade] GenericThrowableClass not set!"));
 		return;
 	}
+
+	if (!GetController()) return;
 
 	FVector CameraLocation;
 	FRotator CameraRotation;
@@ -957,14 +1055,9 @@ void AWeaponTestCharacter::ThrowGrenade()
 	// DataTable에서 수류탄 데이터 로드 — 활성 종류 기준
 	Grenade->InitFromDataTable(ActiveGrenadeID);
 
-	FVector ThrowDirection = CameraRotation.Vector();
-	ThrowDirection.Z += 0.2f;
-	ThrowDirection.Normalize();
-
 	Grenade->ServerThrow(ThrowDirection);
 
-	// 서버 권한에서만 카운트 차감 (서버에서 호출되는 경로 + 클라이언트 임시 차감 회피)
-	if (HasAuthority())
+	// 카운트 차감 + 슬롯 교체 (서버 권한)
 	{
 		const FName ThrownID = ActiveGrenadeID;
 		RemoveGrenadeStock(ThrownID, 1);
@@ -1115,6 +1208,12 @@ void AWeaponTestCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
 	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ActiveSlotIndex, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, GrenadeStock,    COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AWeaponTestCharacter, ActiveGrenadeID, COND_OwnerOnly);
+
+	// 모든 클라에 복제 — 다른 플레이어의 장착 무기도 보여야 함
+	DOREPLIFETIME(AWeaponTestCharacter, CurrentWeapon);
+
+	// 슬롯 모드(무기/수류탄)는 본인+타 플레이어 시각/입력 분기에 모두 영향 → 모든 클라 복제
+	DOREPLIFETIME(AWeaponTestCharacter, CurrentSlot);
 }
 
 // ==================== Ammo Pool ====================

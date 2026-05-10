@@ -116,10 +116,8 @@ void AWeaponBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (HasAuthority() && !WeaponID.IsNone() && WeaponDataTable)
-	{
-		InitFromDataTable(WeaponID);
-	}
+	// Init 경로 일원화: 서버는 SwitchWeaponByID에서 명시적으로 InitFromDataTable 호출, 클라는 OnRep_WeaponID에서 호출.
+	// SpawnActor 직후 BeginPlay 시점엔 WeaponID가 BP CDO 디폴트라 자동 init은 중복/오작동 위험 → 제거.
 }
 
 // ==================== Data ====================
@@ -145,6 +143,8 @@ void AWeaponBase::InitFromDataTable(FName InWeaponID)
 
 	UE_LOG(LogTemp, Warning, TEXT("[WeaponBase] Init: %s (Dmg:%.1f Ammo:%d)"),
 		*Data->DisplayName.ToString(), Data->BaseDamage, Data->MaxAmmo);
+
+	LastInitializedWeaponID = InWeaponID;
 }
 
 void AWeaponBase::ApplyWeaponData(const FWeaponData& Data)
@@ -191,10 +191,10 @@ void AWeaponBase::ApplyWeaponData(const FWeaponData& Data)
 
 void AWeaponBase::OnRep_WeaponID()
 {
-	if (!WeaponID.IsNone())
-	{
-		InitFromDataTable(WeaponID);
-	}
+	// 같은 ID로 이미 InitFromDataTable이 끝났으면 재호출 skip (Listen Server에서 OnRep 자기에코 + 동일 ID 중복 방지)
+	if (WeaponID.IsNone() || WeaponID == LastInitializedWeaponID) return;
+
+	InitFromDataTable(WeaponID);
 }
 
 // ==================== Muzzle ====================
