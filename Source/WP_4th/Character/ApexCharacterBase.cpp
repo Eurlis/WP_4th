@@ -1017,15 +1017,24 @@ void AApexCharacterBase::ServerDropCurrentWeapon_Implementation()
 
 void AApexCharacterBase::AddGrenade(FName GrenadeID)
 {
-	if (!HasAuthority()) return;
-	if (GrenadeID.IsNone()) return;
+	TryAddGrenadeAuth(GrenadeID);
+}
+
+bool AApexCharacterBase::TryAddGrenadeAuth(FName GrenadeID)
+{
+	if (!HasAuthority()) return false;
+	if (GrenadeID.IsNone()) return false;
+
+	if (GrenadeCount >= MaxGrenadeCount) return false;
 
 	if (GrenadeWeaponID != GrenadeID) GrenadeWeaponID = GrenadeID;
 
 	GrenadeCount = FMath::Min(GrenadeCount + 1, MaxGrenadeCount);
 
-	UE_LOG(LogTemp, Log, TEXT("[Grenade] AddGrenade: %s, count = %d/%d"),
+	UE_LOG(LogTemp, Log, TEXT("[Grenade] TryAddGrenadeAuth: %s, count = %d/%d"),
 		*GrenadeID.ToString(), GrenadeCount, MaxGrenadeCount);
+
+	return true;
 }
 
 void AApexCharacterBase::ThrowGrenade()

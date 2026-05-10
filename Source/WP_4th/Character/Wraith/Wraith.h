@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Character/ApexCharacterBase.h"
+#include "WraithPortal.h"
 #include "Wraith.generated.h"
 
 UCLASS()
@@ -50,4 +51,35 @@ private:
 
 	float TacticalDuration = 3.f;
 	float TacticalCooldown = 25.f;
+
+	//Ultimate
+	UPROPERTY(EditDefaultsOnly, Category= "Ultimate")
+	TSubclassOf<AWraithPortal> PortalClass;
+
+	FVector PortalALocation;
+
+	UPROPERTY()
+	AWraithPortal*  PortalA = nullptr;
+
+	UPROPERTY()
+	AWraithPortal* PortalB = nullptr;
+
+	bool bPlacingPortal = false;
+	bool bUltimateOnCooldown = false;
+
+	FTimerHandle UltimateDurationTimer;
+	FTimerHandle UltimateCooldownTimer;
+
+	float UltimateDuration = 30.f;
+	float UltimateCooldown = 120.f;
+
+	void DeactivatePortals();
+
+	UFUNCTION(Server, Reliable)
+	void Server_ActivateUltimate();
+
+
+	TArray<FVector> RecordedPath;
+	FVector LastSampledLocation;
+	float SampleDistance = 100.f;
 };

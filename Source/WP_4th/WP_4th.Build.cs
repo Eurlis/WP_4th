@@ -24,7 +24,8 @@ public class WP_4th : ModuleRules
 			"NiagaraCore",
             "CableComponent",
             "OnlineSubsystem",
-            "OnlineSubsystemUtils"
+            "OnlineSubsystemUtils",
+            "Niagara"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime", "AnimGraphRuntime", "CableComponent", "CableComponent" });

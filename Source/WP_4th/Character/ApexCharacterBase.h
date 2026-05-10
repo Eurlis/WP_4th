@@ -68,6 +68,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Pickup")
 	void AddGrenade(FName GrenadeID);
 
+	bool TryAddGrenadeAuth(FName GrenadeID);
+
 	// ─── Components ───────────────────────────────────────────────
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UHealthComponent* HealthComponent;
