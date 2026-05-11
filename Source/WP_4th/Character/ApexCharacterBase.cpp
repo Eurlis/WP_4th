@@ -14,6 +14,7 @@
 #include "Pickup/PickupBase.h"
 #include "Interaction/InteractionComponent.h"
 #include "Interaction/InteractableInterface.h"
+#include "JunGame/JunRingDamageType.h"
 #include "Net/UnrealNetwork.h"
 #include "WP_4th.h"
 
@@ -456,6 +457,12 @@ float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& Dam
 	if (!HasAuthority() || !IsValid(HealthComponent))
 	{
 		return 0.f;
+	}
+
+	if (DamageEvent.DamageTypeClass && DamageEvent.DamageTypeClass->IsChildOf(UJunRingDamageType::StaticClass()))
+	{
+		HealthComponent->ApplyHealthDamage(DamageAmount);
+		return DamageAmount;
 	}
 
 	HealthComponent->ApplyDamage(DamageAmount, false);
