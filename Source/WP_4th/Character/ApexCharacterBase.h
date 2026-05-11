@@ -393,9 +393,11 @@ private:
 	float DefaultGroundFriction;
 	float DefaultBrakingDecelerationWalking;
 	float DefaultMaxWalkSpeedCrouched;
+protected:
 	float SavedDefaultWalkSpeed = 0.f;
 
 	// ─── Slot Private Helpers ─────────────────────────────────────
+private:
 	bool IsSlotEmpty(int32 SlotIndex) const;
 	int32 FindNextAvailableSlot(int32 SkipIndex) const;
 	EWeaponSlotType GetSlotForCategory(EWeaponType Category) const;
@@ -440,4 +442,13 @@ public:
 protected:
 	virtual void ActivateTactical() {};
 	virtual void ActivateUltimate() {};
+
+	UPROPERTY(BlueprintReadOnly, Category="Movement")
+	float SpeedMultiplier = 1.f;
+
+public:
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_GrantAirJump();
+
+
 };

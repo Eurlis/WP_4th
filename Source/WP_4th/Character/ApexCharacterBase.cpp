@@ -228,7 +228,7 @@ void AApexCharacterBase::BeginPlay()
 	Super::BeginPlay();
 
 	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-	MovementComponent->MaxWalkSpeed = WalkSpeed;
+	MovementComponent->MaxWalkSpeed = WalkSpeed * SpeedMultiplier;
 	DefaultGroundFriction = MovementComponent->GroundFriction;
 	DefaultBrakingDecelerationWalking = MovementComponent->BrakingDecelerationWalking;
 	DefaultFirstPersonMeshLocation = FirstPersonMesh->GetRelativeLocation();
@@ -435,13 +435,13 @@ void AApexCharacterBase::StopSprint()
 void AApexCharacterBase::Server_StartSprint_Implementation()
 {
 	bIsSprinting = true;
-	GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = SprintSpeed * SpeedMultiplier;
 }
 
 void AApexCharacterBase::Server_StopSprint_Implementation()
 {
 	bIsSprinting = false;
-	GetCharacterMovement()->MaxWalkSpeed = bIsSliding ? SlideMaxSpeed : WalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = (bIsSliding ? SlideMaxSpeed : WalkSpeed) * SpeedMultiplier;
 }
 
 void AApexCharacterBase::OnRep_IsSprinting()
@@ -599,7 +599,7 @@ void AApexCharacterBase::RestoreDefaultMovementSettings()
 	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
 	MovementComponent->GroundFriction = DefaultGroundFriction;
 	MovementComponent->BrakingDecelerationWalking = DefaultBrakingDecelerationWalking;
-	MovementComponent->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	MovementComponent->MaxWalkSpeed = (bIsSprinting ? SprintSpeed : WalkSpeed) * SpeedMultiplier;
 	MovementComponent->MaxWalkSpeedCrouched = DefaultMaxWalkSpeedCrouched;
 }
 
@@ -794,6 +794,11 @@ void AApexCharacterBase::OnInteract()
 		Iface->OnInteract(this);
 	else
 		ServerInteract(Target);
+}
+
+void AApexCharacterBase::Multicast_GrantAirJump_Implementation()
+{
+		JumpCurrentCount = 0;
 }
 
 void AApexCharacterBase::ServerInteract_Implementation(AActor* TargetInteractable)
