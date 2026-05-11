@@ -43,6 +43,9 @@ AWraith::AWraith()
 		GetMesh()->SetAnimInstanceClass(ABP_Wraith.Class);
 	}
 
+	VoidVFX = CreateDefaultSubobject<UNiagaraComponent>(TEXT("VoidVFX"));
+	VoidVFX ->SetupAttachment(RootComponent);
+	VoidVFX ->SetAutoActivate(false);
 }
 
 // Called when the game starts or when spawned
@@ -69,7 +72,14 @@ void AWraith::Server_ActivateTactical_Implementation()
 {
 	if (bTacticalOnCooldown || IsInVoid) return;
 	Multcast_SetvoidState(true);
-	GetWorldTimerManager().SetTimer(TacticalDurationTimer, this, &AWraith::ExitVoid, TacticalDuration, false);
+	GetWorldTimerManager().SetTimer(
+		 TacticalDurationTimer,
+		 FTimerDelegate::CreateLambda([this]()
+		 {
+			 Multcast_SetvoidState(false);
+		 }),
+		 TacticalDuration, false);
+
 }
 
 void AWraith::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
@@ -94,6 +104,17 @@ void AWraith::Tick(float DeltaTime)
 	}
 }
 
+float AWraith::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator,
+	AActor* DamageCauser)
+{
+	if (HasAuthority() && IsInVoid)
+		return 0.f;
+
+	return Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+
+}
+
+
 // Called to bind functionality to input
 void AWraith::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -109,16 +130,37 @@ void AWraith::OnRep_IsInVoid()
 void AWraith::EnterVoid()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[Wraith] Into the Void 진입!"));
-	GetMesh()->SetScalarParameterValueOnMaterials(TEXT("Opacity"), 0.3f);
-	GetCharacterMovement()->MaxWalkSpeed *=1.5f;
+
+	/*VoidMaterials.Empty();
+	for (int32 i =0; i< GetMesh()->GetNumMaterials(); i++)
+	{
+		UMaterialInstanceDynamic* MID = GetMesh()->CreateAndSetMaterialInstanceDynamic(i);
+		MID->SetScalarParameterValue(TEXT("Opacity"), 0.3);
+		VoidMaterials.Add(MID);
+	}*/
+	GetMesh()->SetVisibility(false);
+
+	if (VoidVFX) VoidVFX->Activate(true);
+	SpeedMultiplier = 1.5f;
+	GetCharacterMovement()->MaxWalkSpeed = (bIsSprinting ? SprintSpeed : WalkSpeed) * SpeedMultiplier;
+
 }
 
 void AWraith::ExitVoid()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[Wraith] Void 종료, 쿨타임 시작"));
+	/*for (UMaterialInstanceDynamic* MID : VoidMaterials)
+	{
+		if (MID) MID->SetScalarParameterValue(TEXT("Opacity"), 1.f);
+	}
+	VoidMaterials.Empty();*/
+	GetMesh()->SetVisibility(true);
 
-	GetMesh()->SetScalarParameterValueOnMaterials(TEXT("Opacity"), 1.f);
-	GetCharacterMovement()->MaxWalkSpeed /=1.5f;
+	if (VoidVFX) VoidVFX->Deactivate();
+
+	SpeedMultiplier = 1.0f;
+	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+
 
 	if (HasAuthority())
 	{

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Character/ApexCharacterBase.h"
 #include "WraithPortal.h"
+#include "NiagaraComponent.h"
 #include "Wraith.generated.h"
 
 UCLASS()
@@ -27,6 +28,8 @@ protected:
 public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
+
+	virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -52,6 +55,8 @@ private:
 	float TacticalDuration = 3.f;
 	float TacticalCooldown = 25.f;
 
+	UPROPERTY(VisibleAnywhere, Category= "VFX")
+	UNiagaraComponent* VoidVFX;
 	//Ultimate
 	UPROPERTY(EditDefaultsOnly, Category= "Ultimate")
 	TSubclassOf<AWraithPortal> PortalClass;
@@ -82,4 +87,7 @@ private:
 	TArray<FVector> RecordedPath;
 	FVector LastSampledLocation;
 	float SampleDistance = 100.f;
+
+	UPROPERTY()
+	TArray<UMaterialInstanceDynamic*> VoidMaterials;
 };
