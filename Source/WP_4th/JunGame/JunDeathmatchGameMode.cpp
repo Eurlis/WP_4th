@@ -166,15 +166,23 @@ void AJunDeathmatchGameMode::SpawnRingActor()
 		return;
 	}
 
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = this;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	RingActorInstance = GetWorld()->SpawnActor<AJunRingActor>(
+	const FTransform RingTransform(FRotator::ZeroRotator, FVector::ZeroVector);
+	RingActorInstance = GetWorld()->SpawnActorDeferred<AJunRingActor>(
 		RingActorClass,
-		FVector::ZeroVector,
-		FRotator::ZeroRotator,
-		SpawnParams);
+		RingTransform,
+		this,
+		nullptr,
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+
+	if (IsValid(RingActorInstance))
+	{
+		if (UJunRingComponent* RingComponent = RingActorInstance->GetRingComponent())
+		{
+			RingComponent->bStartAutomatically = false;
+		}
+
+		RingActorInstance->FinishSpawning(RingTransform);
+	}
 
 	if (IsValid(RingActorInstance))
 	{
@@ -196,6 +204,12 @@ void AJunDeathmatchGameMode::FinishMatch(AController* WinningController)
 	}
 
 	bAllowRespawn = false;
+
+	if (IsValid(RingActorInstance))
+	{
+		RingActorInstance->StopRing();
+		SyncRingStateToGameState();
+	}
 
 	if (AJunDeathmatchGameState* JunGameState = GetGameState<AJunDeathmatchGameState>())
 	{
@@ -239,6 +253,12 @@ void AJunDeathmatchGameMode::HandleMatchHasStarted()
 void AJunDeathmatchGameMode::HandleMatchHasEnded()
 {
 	Super::HandleMatchHasEnded();
+
+	if (IsValid(RingActorInstance))
+	{
+		RingActorInstance->StopRing();
+		SyncRingStateToGameState();
+	}
 
 	if (AJunDeathmatchGameState* JunGameState = GetGameState<AJunDeathmatchGameState>())
 	{

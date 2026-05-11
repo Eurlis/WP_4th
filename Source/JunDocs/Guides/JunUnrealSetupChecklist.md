@@ -53,14 +53,17 @@
 35. World Settings에서 GameMode를 Jun Deathmatch GameMode 블루프린트로 지정한다
 36. PIE에서 match start 후 Ring이 시작되는지 확인한다
 37. `JunDeathmatchGameState`의 Ring 복제값이 갱신되는지 확인한다
+38. Deathmatch GameMode가 spawn한 Ring은 component `bStartAutomatically`를 끄고 `StartDeathmatch`에서만 시작해야 한다
+39. `bStartRingOnBeginPlay`가 꺼져 있으면 match start 이후에도 Ring이 자동 시작하지 않는지 확인한다
+40. match end 이후 Ring damage timer가 멈추고 GameState Ring 상태가 inactive로 갱신되는지 확인한다
 
 ## F. 멀티플레이 확인
 
-38. PIE 인원 수를 2 이상으로 설정한다
-39. `BP_JunRingHost`를 쓰는 경우 Class Defaults에서 `Replicates`가 켜져 있는지 확인한다
-40. Listen Server + Client에서 Ring 반지름과 phase가 일관되게 보이는지 확인한다
-41. 클라이언트가 Ring 밖에 있을 때 서버 기준으로 데미지가 들어가는지 확인한다
-42. 데미지 결과가 클라이언트에서 임의로 계산되지 않는지 확인한다
+41. PIE 인원 수를 2 이상으로 설정한다
+42. `BP_JunRingHost`를 쓰는 경우 Class Defaults에서 `Replicates`가 켜져 있는지 확인한다
+43. Listen Server + Client에서 Ring 반지름과 phase가 일관되게 보이는지 확인한다
+44. 클라이언트가 Ring 밖에 있을 때 서버 기준으로 데미지가 들어가는지 확인한다
+45. 데미지 결과가 클라이언트에서 임의로 계산되지 않는지 확인한다
 
 ## G. 현재 구현 기준
 

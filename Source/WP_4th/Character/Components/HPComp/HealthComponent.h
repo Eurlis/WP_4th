@@ -42,6 +42,9 @@ public:
 	void ApplyDamage(float RawDamage, bool bIsHeadshot);
 
 	UFUNCTION(BlueprintCallable, Category = "Health")
+	void ApplyHealthDamage(float RawDamage);
+
+	UFUNCTION(BlueprintCallable, Category = "Health")
 	bool IsDead() const;
 
 protected:

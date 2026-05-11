@@ -47,6 +47,20 @@ void UHealthComponent::ApplyDamage(float RawDamage, bool bIsHeadshot)
 	}
 }
 
+void UHealthComponent::ApplyHealthDamage(float RawDamage)
+{
+	if (!GetOwner()->HasAuthority()) return;
+	if (IsDead()) return;
+
+	Health = FMath::Max(0.f, Health - RawDamage);
+	OnHealthChanged.Broadcast(Health, MaxHealth);
+
+	if (IsDead())
+	{
+		OnDeath.Broadcast();
+	}
+}
+
 bool UHealthComponent::IsDead() const
 {
 	return Health <= 0.f;
