@@ -148,14 +148,40 @@ AApexCharacterBase::AApexCharacterBase()
 
 void AApexCharacterBase::OnRep_CurrentWeapon()
 {
-	if (!CurrentWeapon) return;
-	CurrentWeapon->OwningCharacter = this;
-	CurrentWeapon->AttachToComponent(
-		FirstPersonMesh,
-		FAttachmentTransformRules::SnapToTargetIncludingScale,
-		FName("weapon_r"));
-	CurrentWeapon->OnEquipped();
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->OwningCharacter = this;
+		CurrentWeapon->AttachToComponent(
+			FirstPersonMesh,
+			FAttachmentTransformRules::SnapToTargetIncludingScale,
+			FName("weapon_r"));
+		CurrentWeapon->OnEquipped();
+	}
 
+	// nullptr 케이스도 BP에 전달 — BP 측에서 HUD 클리어/숨김 처리 (회귀 #5 방지)
+	BP_OnWeaponEquipped(CurrentWeapon);
+}
+
+void AApexCharacterBase::OnRep_CurrentSlot()
+{
+	// Grenade 슬롯 진입: 현재 무기 메시 숨김 (서버 SwitchToSlot_Internal과 동일 시각 효과)
+	if (CurrentSlot == EEquippedSlot::Grenade && PreviousSlot != EEquippedSlot::Grenade)
+	{
+		if (CurrentWeapon)
+		{
+			CurrentWeapon->SetActorHiddenInGame(true);
+		}
+	}
+	// Grenade 슬롯 이탈: 미리보기 정리. CurrentWeapon 복귀/생성은 SwitchWeaponByID + OnRep_CurrentWeapon 경로가 처리.
+	else if (CurrentSlot != EEquippedSlot::Grenade && PreviousSlot == EEquippedSlot::Grenade)
+	{
+		if (bIsAimingThrowable)
+		{
+			StopThrowableAim();
+		}
+	}
+
+	PreviousSlot = CurrentSlot;
 }
 
 void AApexCharacterBase::EquipWeapon(FName WeaponID)
@@ -351,6 +377,8 @@ void AApexCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AApexCharacterBase, CurrentWeapon);
+	// 슬롯 모드는 본인+타 플레이어 시각/입력 분기에 영향 → 모든 클라 복제
+	DOREPLIFETIME(AApexCharacterBase, CurrentSlot);
 	DOREPLIFETIME(AApexCharacterBase, bIsSprinting);
 	DOREPLIFETIME(AApexCharacterBase, bIsSliding);
 	DOREPLIFETIME(AApexCharacterBase, SlideAnimationPhase);
