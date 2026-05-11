@@ -101,14 +101,14 @@ public:
 	UPROPERTY()
 	FName LastWeaponID;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Weapons")
-	int32 GrenadeCount = 2;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapons")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Grenade")
 	int32 MaxGrenadeCount = 3;
 
-	UPROPERTY()
-	FName GrenadeWeaponID;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Grenade")
+	TArray<FGrenadeStockEntry> GrenadeStock;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Grenade")
+	FName ActiveGrenadeID = NAME_None;
 
 	// ─── Ammo Pool ────────────────────────────────────────────────
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Ammo")
@@ -163,6 +163,9 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void ServerDropCurrentWeapon();
+
+	UFUNCTION(Server, Reliable)
+	void ServerThrowGrenade();
 
 	UFUNCTION(Server, Reliable)
 	void ServerInteract(AActor* TargetInteractable);
@@ -397,12 +400,23 @@ private:
 	int32 FindNextAvailableSlot(int32 SkipIndex) const;
 	EWeaponSlotType GetSlotForCategory(EWeaponType Category) const;
 	void SwitchToSlot_Internal(int32 SlotIndex);
+	void SwitchToFirstAvailableSlot();
 	void SpawnPickupFromSlot(int32 SlotIndex);
 	void ThrowGrenade();
+	void StartThrowableAim();
 	void StopThrowableAim();
 	bool bIsAimingThrowable = false;
 	float LastDropTime = -10.f;
 	static constexpr float DropCooldown = 0.3f;
+
+	// ─── Grenade Stock Helpers ────────────────────────────────────
+	int32 GetGrenadeCountByID(FName GrenadeID) const;
+	int32 GetTotalGrenadeCount() const;
+	bool IsGrenadeStockFull(FName GrenadeID) const;
+	TArray<FName> GetAvailableGrenadeIDs() const;
+	FName GetNextGrenadeIDInCycle() const;
+	bool AddGrenadeStock(FName GrenadeID, int32 Amount);
+	bool RemoveGrenadeStock(FName GrenadeID, int32 Amount);
 
 	// ─── Death ────────────────────────────────────────────────────
 	UFUNCTION()

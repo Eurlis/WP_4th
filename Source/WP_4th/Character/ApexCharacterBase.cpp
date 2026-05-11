@@ -120,6 +120,30 @@ AApexCharacterBase::AApexCharacterBase()
 	// AimAction
 	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Aim(TEXT("/Game/OJJ/Inputs/IA_Aim.IA_Aim"));
 	if (IA_Aim.Succeeded()) AimAction = IA_Aim.Object;
+
+	// SwitchARAction (파일명 오타: IA_SwichAR)
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_SwitchAR(TEXT("/Game/OJJ/Inputs/IA_SwichAR.IA_SwichAR"));
+	if (IA_SwitchAR.Succeeded()) SwitchARAction = IA_SwitchAR.Object;
+
+	// SwitchPistolAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_SwitchPistol(TEXT("/Game/OJJ/Inputs/IA_SwitchPistol.IA_SwitchPistol"));
+	if (IA_SwitchPistol.Succeeded()) SwitchPistolAction = IA_SwitchPistol.Object;
+
+	// SwitchShotgunAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_SwitchShotgun(TEXT("/Game/OJJ/Inputs/IA_SwitchShotgun.IA_SwitchShotgun"));
+	if (IA_SwitchShotgun.Succeeded()) SwitchShotgunAction = IA_SwitchShotgun.Object;
+
+	// SwitchGrenadeAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_SwitchGrenade(TEXT("/Game/OJJ/Inputs/IA_SwitchGrenade.IA_SwitchGrenade"));
+	if (IA_SwitchGrenade.Succeeded()) SwitchGrenadeAction = IA_SwitchGrenade.Object;
+
+	// InteractAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Interact(TEXT("/Game/OJJ/Inputs/IA_Interact.IA_Interact"));
+	if (IA_Interact.Succeeded()) InteractAction = IA_Interact.Object;
+
+	// DropAction
+	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Drop(TEXT("/Game/OJJ/Inputs/IA_DropWeapon.IA_DropWeapon"));
+	if (IA_Drop.Succeeded()) DropAction = IA_Drop.Object;
 }
 
 void AApexCharacterBase::OnRep_CurrentWeapon()
@@ -336,6 +360,8 @@ void AApexCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME_CONDITION(AApexCharacterBase, ShotgunAmmo,     COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AApexCharacterBase, WeaponSlots,     COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AApexCharacterBase, ActiveSlotIndex, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AApexCharacterBase, GrenadeStock,    COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AApexCharacterBase, ActiveGrenadeID, COND_OwnerOnly);
 }
 
 void AApexCharacterBase::MoveInput(const FInputActionValue& Value)
@@ -703,7 +729,11 @@ void AApexCharacterBase::OnAimStopped()
 
 void AApexCharacterBase::StartFire()
 {
-	if (CurrentSlot == EEquippedSlot::Weapon && CurrentWeapon)
+	if (CurrentSlot == EEquippedSlot::Grenade)
+	{
+		StartThrowableAim();
+	}
+	else if (CurrentWeapon)
 	{
 		CurrentWeapon->StartFire();
 	}
@@ -711,9 +741,26 @@ void AApexCharacterBase::StartFire()
 
 void AApexCharacterBase::StopFire()
 {
+	if (CurrentSlot == EEquippedSlot::Grenade && bIsAimingThrowable)
+	{
+		StopThrowableAim();
+		ServerThrowGrenade();
+		return;
+	}
+
 	if (CurrentSlot == EEquippedSlot::Weapon && CurrentWeapon)
 	{
 		CurrentWeapon->StopFire();
+	}
+}
+
+void AApexCharacterBase::ServerThrowGrenade_Implementation()
+{
+	ThrowGrenade();
+
+	if (GetTotalGrenadeCount() <= 0)
+	{
+		SwitchToFirstAvailableSlot();
 	}
 }
 
@@ -845,19 +892,39 @@ EWeaponSlotType AApexCharacterBase::GetSlotForCategory(EWeaponType WeaponCategor
 
 void AApexCharacterBase::SwitchToSlot_Internal(int32 SlotIndex)
 {
-	if (IsSlotEmpty(SlotIndex)) return;
-
-	ActiveSlotIndex = SlotIndex;
-
 	if (SlotIndex == (int32)EWeaponSlotType::Throwable)
 	{
-		GrenadeWeaponID = WeaponSlots[SlotIndex];
-
-		if (CurrentSlot == EEquippedSlot::Grenade) return;
-		if (GrenadeCount <= 0)
+		if (GetTotalGrenadeCount() <= 0)
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[Slot] No grenades left!"));
 			return;
+		}
+
+		// 4번 슬롯 재진입 = 다음 종류로 사이클
+		if (CurrentSlot == EEquippedSlot::Grenade && ActiveSlotIndex == SlotIndex)
+		{
+			const FName Next = GetNextGrenadeIDInCycle();
+			if (!Next.IsNone() && Next != ActiveGrenadeID)
+			{
+				ActiveGrenadeID = Next;
+				if (WeaponSlots.IsValidIndex(SlotIndex))
+					WeaponSlots[SlotIndex] = Next;
+				UE_LOG(LogTemp, Warning, TEXT("[Slot] Cycled active grenade -> %s"), *Next.ToString());
+			}
+			return;
+		}
+
+		// ActiveGrenadeID 보정: 비었거나 카운트 0이면 첫 보유 종류로 고정
+		if (ActiveGrenadeID.IsNone() || GetGrenadeCountByID(ActiveGrenadeID) == 0)
+		{
+			const TArray<FName> Avail = GetAvailableGrenadeIDs();
+			if (Avail.Num() > 0)
+			{
+				ActiveGrenadeID = Avail[0];
+				if (WeaponSlots.IsValidIndex(SlotIndex))
+					WeaponSlots[SlotIndex] = Avail[0];
+			}
+			else return;
 		}
 
 		if (CurrentWeapon)
@@ -866,10 +933,15 @@ void AApexCharacterBase::SwitchToSlot_Internal(int32 SlotIndex)
 			CurrentWeapon->SetActorHiddenInGame(true);
 		}
 
+		ActiveSlotIndex = SlotIndex;
 		CurrentSlot = EEquippedSlot::Grenade;
+		UE_LOG(LogTemp, Warning, TEXT("[Slot] Switched to Throwable (Active: %s, %d)"),
+			*ActiveGrenadeID.ToString(), GetGrenadeCountByID(ActiveGrenadeID));
 	}
 	else
 	{
+		if (IsSlotEmpty(SlotIndex)) return;
+		ActiveSlotIndex = SlotIndex;
 		SwitchWeaponByID(WeaponSlots[SlotIndex]);
 	}
 }
@@ -903,7 +975,14 @@ void AApexCharacterBase::ServerSwitchToSlot_Implementation(int32 SlotIndex)
 {
 	if (!HasAuthority()) return;
 	if (SlotIndex < 0 || SlotIndex >= WeaponSlots.Num()) return;
-	if (IsSlotEmpty(SlotIndex)) return;
+	if (SlotIndex == (int32)EWeaponSlotType::Throwable)
+	{
+		if (GetTotalGrenadeCount() <= 0) return;
+	}
+	else
+	{
+		if (IsSlotEmpty(SlotIndex)) return;
+	}
 	SwitchToSlot_Internal(SlotIndex);
 }
 
@@ -937,25 +1016,21 @@ void AApexCharacterBase::ServerAddWeaponToSlot_Implementation(FName WeaponID)
 
 	int32 TargetSlot = -1;
 
-	if (Category == EWeaponType::Pistol)
+	if (Category == EWeaponType::Throwable)
 	{
-		TargetSlot = (int32)EWeaponSlotType::Pistol;
-	}
-	else if (Category == EWeaponType::Throwable)
-	{
-		TargetSlot = (int32)EWeaponSlotType::Throwable;
-		AddGrenade(WeaponID);
-		WeaponSlots[TargetSlot] = WeaponID;
+		// helper에 모든 결정권 위임 (풀 거부, 활성 종류 보존, 슬롯 갱신)
+		TryAddGrenadeAuth(WeaponID);
 		return;
 	}
 	else
 	{
+		// Pistol 포함 모든 총기류 → Main1(0) 또는 Main2(1)
 		if (IsSlotEmpty((int32)EWeaponSlotType::Main1))
 			TargetSlot = (int32)EWeaponSlotType::Main1;
 		else if (IsSlotEmpty((int32)EWeaponSlotType::Main2))
 			TargetSlot = (int32)EWeaponSlotType::Main2;
 		else
-			TargetSlot = (ActiveSlotIndex >= 0 && ActiveSlotIndex <= 1)
+			TargetSlot = (ActiveSlotIndex == 0 || ActiveSlotIndex == 1)
 					   ? ActiveSlotIndex
 					   : (int32)EWeaponSlotType::Main1;
 	}
@@ -990,8 +1065,8 @@ void AApexCharacterBase::ServerDropCurrentWeapon_Implementation()
 
 	if (DroppedSlot == (int32)EWeaponSlotType::Throwable)
 	{
-		GrenadeCount = 0;
-		GrenadeWeaponID = NAME_None;
+		GrenadeStock.Empty();
+		ActiveGrenadeID = NAME_None;
 	}
 
 	const int32 NextSlot = FindNextAvailableSlot(DroppedSlot);
@@ -1017,7 +1092,8 @@ void AApexCharacterBase::ServerDropCurrentWeapon_Implementation()
 
 void AApexCharacterBase::AddGrenade(FName GrenadeID)
 {
-	TryAddGrenadeAuth(GrenadeID);
+	if (HasAuthority())
+		TryAddGrenadeAuth(GrenadeID);
 }
 
 bool AApexCharacterBase::TryAddGrenadeAuth(FName GrenadeID)
@@ -1025,21 +1101,33 @@ bool AApexCharacterBase::TryAddGrenadeAuth(FName GrenadeID)
 	if (!HasAuthority()) return false;
 	if (GrenadeID.IsNone()) return false;
 
-	if (GrenadeCount >= MaxGrenadeCount) return false;
+	if (IsGrenadeStockFull(GrenadeID))
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Grenade] TryAddGrenadeAuth: %s full (%d/%d), refused"),
+			*GrenadeID.ToString(), GetGrenadeCountByID(GrenadeID), MaxGrenadeCount);
+		return false;
+	}
 
-	if (GrenadeWeaponID != GrenadeID) GrenadeWeaponID = GrenadeID;
+	const bool bAdded = AddGrenadeStock(GrenadeID, 1);
+	if (!bAdded) return false;
 
-	GrenadeCount = FMath::Min(GrenadeCount + 1, MaxGrenadeCount);
+	// 활성 종류가 비어있을 때만 갱신
+	if (ActiveGrenadeID.IsNone() || GetGrenadeCountByID(ActiveGrenadeID) == 0)
+	{
+		ActiveGrenadeID = GrenadeID;
+		if (WeaponSlots.IsValidIndex((int32)EWeaponSlotType::Throwable))
+			WeaponSlots[(int32)EWeaponSlotType::Throwable] = GrenadeID;
+	}
 
-	UE_LOG(LogTemp, Log, TEXT("[Grenade] TryAddGrenadeAuth: %s, count = %d/%d"),
-		*GrenadeID.ToString(), GrenadeCount, MaxGrenadeCount);
-
+	UE_LOG(LogTemp, Log, TEXT("[Grenade] TryAddGrenadeAuth: %s, count=%d/%d (Active: %s)"),
+		*GrenadeID.ToString(), GetGrenadeCountByID(GrenadeID), MaxGrenadeCount, *ActiveGrenadeID.ToString());
 	return true;
 }
 
 void AApexCharacterBase::ThrowGrenade()
 {
-	if (GrenadeCount <= 0 || !GenericThrowableClass || !GetController()) return;
+	if (ActiveGrenadeID.IsNone() || GetGrenadeCountByID(ActiveGrenadeID) <= 0) return;
+	if (!GenericThrowableClass || !GetController()) return;
 
 	FVector CameraLocation;
 	FRotator CameraRotation;
@@ -1055,17 +1143,46 @@ void AApexCharacterBase::ThrowGrenade()
 	AThrowableBase* Grenade = GetWorld()->SpawnActor<AThrowableBase>(
 		GenericThrowableClass, SpawnLocation, CameraRotation, SpawnParams);
 
-	if (Grenade)
+	if (!Grenade) return;
+
+	Grenade->InitFromDataTable(ActiveGrenadeID);
+
+	FVector ThrowDirection = CameraRotation.Vector();
+	ThrowDirection.Z += 0.2f;
+	ThrowDirection.Normalize();
+
+	Grenade->ServerThrow(ThrowDirection);
+
+	if (HasAuthority())
 	{
-		Grenade->InitFromDataTable(GrenadeWeaponID);
+		const FName ThrownID = ActiveGrenadeID;
+		RemoveGrenadeStock(ThrownID, 1);
 
-		FVector ThrowDirection = CameraRotation.Vector();
-		ThrowDirection.Z += 0.2f;
-		ThrowDirection.Normalize();
+		const int32 Remaining = GetGrenadeCountByID(ThrownID);
+		UE_LOG(LogTemp, Warning, TEXT("[Grenade] Thrown! %s remaining: %d"), *ThrownID.ToString(), Remaining);
 
-		Grenade->ServerThrow(ThrowDirection);
-		GrenadeCount--;
+		if (Remaining == 0)
+		{
+			const FName Next = GetNextGrenadeIDInCycle();
+			if (!Next.IsNone() && Next != ThrownID)
+			{
+				ActiveGrenadeID = Next;
+				if (WeaponSlots.IsValidIndex((int32)EWeaponSlotType::Throwable))
+					WeaponSlots[(int32)EWeaponSlotType::Throwable] = Next;
+			}
+			else
+			{
+				ActiveGrenadeID = NAME_None;
+				if (WeaponSlots.IsValidIndex((int32)EWeaponSlotType::Throwable))
+					WeaponSlots[(int32)EWeaponSlotType::Throwable] = NAME_None;
+			}
+		}
 	}
+}
+
+void AApexCharacterBase::StartThrowableAim()
+{
+	bIsAimingThrowable = true;
 }
 
 void AApexCharacterBase::StopThrowableAim()
@@ -1159,4 +1276,90 @@ int32 AApexCharacterBase::ConsumeReserve(EAmmoType Type, int32 Needed)
 void AApexCharacterBase::ServerAddAmmo_Implementation(EAmmoType Type, int32 Count)
 {
 	AddAmmo(Type, Count);
+}
+
+// ==================== Grenade Stock Helpers ====================
+
+int32 AApexCharacterBase::GetGrenadeCountByID(FName GrenadeID) const
+{
+	for (const FGrenadeStockEntry& E : GrenadeStock)
+		if (E.GrenadeID == GrenadeID) return E.Count;
+	return 0;
+}
+
+int32 AApexCharacterBase::GetTotalGrenadeCount() const
+{
+	int32 Total = 0;
+	for (const FGrenadeStockEntry& E : GrenadeStock) Total += E.Count;
+	return Total;
+}
+
+bool AApexCharacterBase::IsGrenadeStockFull(FName GrenadeID) const
+{
+	return GetGrenadeCountByID(GrenadeID) >= MaxGrenadeCount;
+}
+
+TArray<FName> AApexCharacterBase::GetAvailableGrenadeIDs() const
+{
+	TArray<FName> Out;
+	for (const FGrenadeStockEntry& E : GrenadeStock)
+		if (E.Count > 0) Out.Add(E.GrenadeID);
+	return Out;
+}
+
+FName AApexCharacterBase::GetNextGrenadeIDInCycle() const
+{
+	const TArray<FName> Avail = GetAvailableGrenadeIDs();
+	if (Avail.Num() == 0) return NAME_None;
+	const int32 Idx = Avail.IndexOfByKey(ActiveGrenadeID);
+	return Avail[(Idx == INDEX_NONE ? 0 : (Idx + 1) % Avail.Num())];
+}
+
+bool AApexCharacterBase::AddGrenadeStock(FName GrenadeID, int32 Amount)
+{
+	if (GrenadeID.IsNone() || Amount <= 0) return false;
+	if (IsGrenadeStockFull(GrenadeID)) return false;
+
+	for (FGrenadeStockEntry& E : GrenadeStock)
+	{
+		if (E.GrenadeID == GrenadeID)
+		{
+			E.Count = FMath::Min(E.Count + Amount, MaxGrenadeCount);
+			return true;
+		}
+	}
+	FGrenadeStockEntry NewEntry;
+	NewEntry.GrenadeID = GrenadeID;
+	NewEntry.Count = FMath::Min(Amount, MaxGrenadeCount);
+	GrenadeStock.Add(NewEntry);
+	return true;
+}
+
+bool AApexCharacterBase::RemoveGrenadeStock(FName GrenadeID, int32 Amount)
+{
+	if (GrenadeID.IsNone() || Amount <= 0) return false;
+	for (int32 i = 0; i < GrenadeStock.Num(); ++i)
+	{
+		if (GrenadeStock[i].GrenadeID == GrenadeID)
+		{
+			GrenadeStock[i].Count = FMath::Max(0, GrenadeStock[i].Count - Amount);
+			return true;
+		}
+	}
+	return false;
+}
+
+void AApexCharacterBase::SwitchToFirstAvailableSlot()
+{
+	if (!HasAuthority()) return;
+	for (int32 i = 0; i < WeaponSlots.Num(); ++i)
+	{
+		if (i == (int32)EWeaponSlotType::Throwable) continue;
+		if (!WeaponSlots[i].IsNone())
+		{
+			SwitchToSlot_Internal(i);
+			return;
+		}
+	}
+	ActiveSlotIndex = -1;
 }
