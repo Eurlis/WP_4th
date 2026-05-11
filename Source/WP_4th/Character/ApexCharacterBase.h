@@ -62,6 +62,10 @@ public:
 
 	UFUNCTION()
 	void OnRep_CurrentWeapon();
+
+	UFUNCTION()
+	void OnRep_CurrentSlot();
+
 	void EquipWeapon(FName WeaponID);
 	void SwitchWeaponByID(FName WeaponID);
 
@@ -75,12 +79,22 @@ public:
 	UHealthComponent* HealthComponent;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category= "Components")
 	UPakousComponent* PakComp;
-	UPROPERTY(ReplicatedUsing = OnRep_CurrentWeapon)
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentWeapon, BlueprintReadOnly, Category = "Weapon")
 	AWeaponBase* CurrentWeapon;
+
+	// CurrentSlot Replication 보조 변수 (OnRep 비교용)
+	UPROPERTY()
+	AWeaponBase* PreviousWeapon = nullptr;
+
 	UPROPERTY(EditAnywhere, Category= "Weapon")
 	TSubclassOf<AWeaponBase> GenericWeaponClass;
-	UPROPERTY(BlueprintReadOnly, Category = "Weapon")
+
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentSlot, BlueprintReadOnly, Category = "Weapon")
 	EEquippedSlot CurrentSlot = EEquippedSlot::Weapon;
+
+	// CurrentSlot Replication 보조 변수 (OnRep 비교용)
+	UPROPERTY()
+	EEquippedSlot PreviousSlot = EEquippedSlot::Weapon;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UInteractionComponent* InteractionComp;
@@ -164,8 +178,8 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerDropCurrentWeapon();
 
-	UFUNCTION(Server, Reliable)
-	void ServerThrowGrenade();
+	UFUNCTION(Server, Reliable, WithValidation)
+	void ServerThrowGrenade(FVector ThrowDirection);
 
 	UFUNCTION(Server, Reliable)
 	void ServerInteract(AActor* TargetInteractable);
@@ -296,6 +310,15 @@ public:
 	virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 		AController* EventInstigator, AActor* DamageCauser) override;
 
+	// ─── Weapon System Interface (CLAUDE.md 합의) ────────────────
+	UFUNCTION()
+	void ServerApplyDamage(float Damage, ACharacter* DamageInstigator, FHitResult HitResult);
+
+	UFUNCTION(Client, Reliable)
+	void ClientShowHitMarker(bool bIsHeadshot);
+
+	FVector GetAimDirection() const;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
@@ -410,12 +433,25 @@ private:
 	static constexpr float DropCooldown = 0.3f;
 
 	// ─── Grenade Stock Helpers ────────────────────────────────────
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="Weapon|Grenade")
 	int32 GetGrenadeCountByID(FName GrenadeID) const;
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="Weapon|Grenade")
 	int32 GetTotalGrenadeCount() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="Weapon|Grenade")
 	bool IsGrenadeStockFull(FName GrenadeID) const;
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="Weapon|Grenade")
 	TArray<FName> GetAvailableGrenadeIDs() const;
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="Weapon|Grenade")
 	FName GetNextGrenadeIDInCycle() const;
+
+	UFUNCTION(BlueprintCallable, Category="Weapon|Grenade")
 	bool AddGrenadeStock(FName GrenadeID, int32 Amount);
+
+	UFUNCTION(BlueprintCallable, Category="Weapon|Grenade")
 	bool RemoveGrenadeStock(FName GrenadeID, int32 Amount);
 
 	// ─── Death ────────────────────────────────────────────────────

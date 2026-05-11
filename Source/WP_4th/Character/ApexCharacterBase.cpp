@@ -82,6 +82,13 @@ AApexCharacterBase::AApexCharacterBase()
 	//Weapon Setting
 	ConstructorHelpers::FClassFinder<AWeaponBase> BP_Generic (TEXT("/Game/OJJ/BP/BP_Weapon_Generic.BP_Weapon_Generic_C"));
 	if (BP_Generic.Succeeded()) GenericWeaponClass = BP_Generic.Class;
+
+	// BP_Wraith/Octane Default 누락 시 안전망 폴백
+	ConstructorHelpers::FClassFinder<AThrowableBase> BP_Throwable(TEXT("/Game/OJJ/BP/BP_Throwable_Generic.BP_Throwable_Generic_C"));
+	if (BP_Throwable.Succeeded()) GenericThrowableClass = BP_Throwable.Class;
+
+	ConstructorHelpers::FClassFinder<APickupBase> BP_Pickup(TEXT("/Game/OJJ/BP/BP_PickupBase.BP_PickupBase_C"));
+	if (BP_Pickup.Succeeded()) PickupClass = BP_Pickup.Class;
 	//Input Setting
 	static ConstructorHelpers::FObjectFinder<UInputAction> IA_Jump(TEXT("/Game/Input/Actions/IA_Jump.IA_Jump"));
 	if (IA_Jump.Succeeded()) JumpAction = IA_Jump.Object;
@@ -148,6 +155,12 @@ AApexCharacterBase::AApexCharacterBase()
 
 void AApexCharacterBase::OnRep_CurrentWeapon()
 {
+	// 이전 무기 정리: 서버 Destroy 도달 전이거나 다른 무기로 바뀐 경우 detach (회귀 #5 ghost 차단)
+	if (IsValid(PreviousWeapon) && PreviousWeapon != CurrentWeapon)
+	{
+		PreviousWeapon->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	}
+
 	if (CurrentWeapon)
 	{
 		CurrentWeapon->OwningCharacter = this;
@@ -160,6 +173,8 @@ void AApexCharacterBase::OnRep_CurrentWeapon()
 
 	// nullptr 케이스도 BP에 전달 — BP 측에서 HUD 클리어/숨김 처리 (회귀 #5 방지)
 	BP_OnWeaponEquipped(CurrentWeapon);
+
+	PreviousWeapon = CurrentWeapon;
 }
 
 void AApexCharacterBase::OnRep_CurrentSlot()
@@ -772,7 +787,21 @@ void AApexCharacterBase::StopFire()
 	if (CurrentSlot == EEquippedSlot::Grenade && bIsAimingThrowable)
 	{
 		StopThrowableAim();
-		ServerThrowGrenade();
+
+		// 카메라 방향 계산 후 서버 권한으로 위임 (클라 로컬 SpawnActor ghost 회피, 회귀 #8 방지)
+		FVector ThrowDirection = FVector::ForwardVector;
+		if (GetController())
+		{
+			FVector CameraLocation;
+			FRotator CameraRotation;
+			GetController()->GetPlayerViewPoint(CameraLocation, CameraRotation);
+
+			ThrowDirection = CameraRotation.Vector();
+			ThrowDirection.Z += 0.2f;
+			ThrowDirection.Normalize();
+		}
+
+		ServerThrowGrenade(ThrowDirection);
 		return;
 	}
 
@@ -782,8 +811,15 @@ void AApexCharacterBase::StopFire()
 	}
 }
 
-void AApexCharacterBase::ServerThrowGrenade_Implementation()
+bool AApexCharacterBase::ServerThrowGrenade_Validate(FVector ThrowDirection)
 {
+	return !ThrowDirection.IsNearlyZero();
+}
+
+void AApexCharacterBase::ServerThrowGrenade_Implementation(FVector ThrowDirection)
+{
+	// ThrowDirection은 호환성 인자 — 현재 ThrowGrenade()가 자체 카메라 방향 계산 사용
+	// (향후 ThrowGrenade(FVector) 오버로드 분리 시 클라 방향 전달 가능)
 	ThrowGrenade();
 
 	if (GetTotalGrenadeCount() <= 0)
@@ -1390,4 +1426,26 @@ void AApexCharacterBase::SwitchToFirstAvailableSlot()
 		}
 	}
 	ActiveSlotIndex = -1;
+}
+
+// ─── Weapon System Interface (CLAUDE.md 합의) ─────────────────────
+void AApexCharacterBase::ServerApplyDamage(float Damage, ACharacter* DamageInstigator, FHitResult HitResult)
+{
+	// stub — 실제 데미지 적용은 표준 TakeDamage 흐름(HealthComponent)이 처리
+	UE_LOG(LogTemp, Warning, TEXT("[Apex] ServerApplyDamage: %.1f, Bone: %s"), Damage, *HitResult.BoneName.ToString());
+}
+
+void AApexCharacterBase::ClientShowHitMarker_Implementation(bool bIsHeadshot)
+{
+	// stub — 후속 작업에서 HUD 위젯 hit marker 트리거 예정
+	UE_LOG(LogTemp, Warning, TEXT("[Apex] HitMarker! Headshot: %d"), bIsHeadshot);
+}
+
+FVector AApexCharacterBase::GetAimDirection() const
+{
+	if (FirstPersonCameraComponent)
+	{
+		return FirstPersonCameraComponent->GetForwardVector();
+	}
+	return GetActorForwardVector();
 }
