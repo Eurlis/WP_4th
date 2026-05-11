@@ -4,6 +4,7 @@
 #include "Wraith.h"
 
 #include "Camera/CameraComponent.h"
+#include "Algo/Reverse.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Net/UnrealNetwork.h"
@@ -52,7 +53,10 @@ void AWraith::BeginPlay()
 
 void AWraith::ActivateUltimate()
 {
-	Super::ActivateUltimate();
+	if (bUltimateOnCooldown) return;
+	if (PortalA && PortalB) return;
+
+	Server_ActivateUltimate();
 }
 
 void AWraith::ActivateTactical()
@@ -78,6 +82,16 @@ void AWraith::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLif
 void AWraith::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	if (HasAuthority() && bPlacingPortal)
+	{
+		FVector CurrentLocation = GetActorLocation();
+		if (FVector::Dist (CurrentLocation, LastSampledLocation) >= SampleDistance)
+		{
+			RecordedPath.Add(CurrentLocation);
+			LastSampledLocation = CurrentLocation;
+		}
+	}
 }
 
 // Called to bind functionality to input
@@ -115,6 +129,69 @@ void AWraith::ExitVoid()
 		}, TacticalCooldown, false);
 	}
 
+}
+
+void AWraith::DeactivatePortals()
+{
+	if (PortalA) { PortalA->Destroy(); PortalA = nullptr; }
+	if (PortalB) { PortalB->Destroy(); PortalB = nullptr; }
+
+	bUltimateOnCooldown = true;
+	GetWorldTimerManager().SetTimer(UltimateCooldownTimer, [this]()
+	{
+		bUltimateOnCooldown = false;
+	}, UltimateCooldown, false);
+
+	UE_LOG(LogTemp, Log, TEXT("[Wraith Ult] 포탈 Off, 쿨타임.."));
+}
+
+void AWraith::Server_ActivateUltimate_Implementation()
+{
+	if (bUltimateOnCooldown) return;
+	if (PortalA && PortalB) return;
+
+	if (!bPlacingPortal)
+	{
+		PortalALocation = GetActorLocation();
+		bPlacingPortal = true;
+		UE_LOG(LogTemp, Warning, TEXT("[Wraith Ult] Portal A 저장: %s "), *PortalALocation.ToString());
+
+		RecordedPath.Empty();
+		RecordedPath.Add(PortalALocation);
+		LastSampledLocation = PortalALocation;
+
+	}
+	else
+	{
+		bPlacingPortal = false;
+
+		RecordedPath.Add(GetActorLocation());
+
+		if (!PortalClass) PortalClass = AWraithPortal::StaticClass();
+
+		FActorSpawnParameters Params;
+		Params.Owner = this;
+
+
+		PortalA = GetWorld()->SpawnActor<AWraithPortal>(PortalClass, PortalALocation, FRotator::ZeroRotator, Params);
+		PortalB = GetWorld()->SpawnActor<AWraithPortal>(PortalClass, GetActorLocation(), FRotator::ZeroRotator, Params);
+
+
+		if (PortalA && PortalB)
+		{
+			TArray<FVector> ReversedPath = RecordedPath;
+			Algo::Reverse(ReversedPath);
+
+			PortalA->SetPathAndLink(RecordedPath, PortalB);
+			PortalB->SetPathAndLink(ReversedPath, PortalA);
+
+			DrawDebugSphere(GetWorld(), PortalALocation, 100.f, 12, FColor::Red, false, 10.f);
+			DrawDebugSphere(GetWorld(), GetActorLocation(), 100.f, 12, FColor::Blue, false, 10.f);
+			GetWorldTimerManager().SetTimer(UltimateDurationTimer, this, &AWraith::DeactivatePortals, UltimateDuration, false);
+
+			UE_LOG(LogTemp, Log, TEXT("[Wraith Ult] 포탈 On"));
+		}
+	}
 }
 
 void AWraith::Multcast_SetvoidState_Implementation(bool bInVoid)
