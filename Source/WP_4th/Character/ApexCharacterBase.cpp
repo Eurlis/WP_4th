@@ -882,6 +882,11 @@ void AApexCharacterBase::OnInteract()
 		ServerInteract(Target);
 }
 
+void AApexCharacterBase::Multicast_GrantAirJump_Implementation()
+{
+	JumpCurrentCount = 0;
+}
+
 void AApexCharacterBase::ServerInteract_Implementation(AActor* TargetInteractable)
 {
 	if (!TargetInteractable) return;
