@@ -310,6 +310,14 @@ public:
 	virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 		AController* EventInstigator, AActor* DamageCauser) override;
 
+	// ─── FFA Kill Attribution ─────────────────────────────────────
+	UPROPERTY(Transient)
+	TObjectPtr<AController> LastDamageInstigatorController = nullptr;
+
+	float LastDamageTime = 0.f;
+
+	static constexpr float DamageAttributionWindowSeconds = 10.f;
+
 	// ─── Weapon System Interface (CLAUDE.md 합의) ────────────────
 	UFUNCTION()
 	void ServerApplyDamage(float Damage, ACharacter* DamageInstigator, FHitResult HitResult);

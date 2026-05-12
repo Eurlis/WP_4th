@@ -14,8 +14,8 @@
 #include "Pickup/PickupBase.h"
 #include "Interaction/InteractionComponent.h"
 #include "Interaction/InteractableInterface.h"
-#include "JunGame/JunRingDamageType.h"
 #include "Net/UnrealNetwork.h"
+#include "OJJ_GameMode/ApexDeathmatchGameMode.h"
 #include "WP_4th.h"
 
 AApexCharacterBase::AApexCharacterBase()
@@ -270,7 +270,7 @@ void AApexCharacterBase::BeginPlay()
 	Super::BeginPlay();
 
 	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-	MovementComponent->MaxWalkSpeed = WalkSpeed * SpeedMultiplier;
+	MovementComponent->MaxWalkSpeed = WalkSpeed;
 	DefaultGroundFriction = MovementComponent->GroundFriction;
 	DefaultBrakingDecelerationWalking = MovementComponent->BrakingDecelerationWalking;
 	DefaultFirstPersonMeshLocation = FirstPersonMesh->GetRelativeLocation();
@@ -459,10 +459,10 @@ float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& Dam
 		return 0.f;
 	}
 
-	if (DamageEvent.DamageTypeClass && DamageEvent.DamageTypeClass->IsChildOf(UJunRingDamageType::StaticClass()))
+	if (IsValid(EventInstigator))
 	{
-		HealthComponent->ApplyHealthDamage(DamageAmount);
-		return DamageAmount;
+		LastDamageInstigatorController = EventInstigator;
+		LastDamageTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	}
 
 	HealthComponent->ApplyDamage(DamageAmount, false);
@@ -485,13 +485,13 @@ void AApexCharacterBase::StopSprint()
 void AApexCharacterBase::Server_StartSprint_Implementation()
 {
 	bIsSprinting = true;
-	GetCharacterMovement()->MaxWalkSpeed = SprintSpeed * SpeedMultiplier;
+	GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
 }
 
 void AApexCharacterBase::Server_StopSprint_Implementation()
 {
 	bIsSprinting = false;
-	GetCharacterMovement()->MaxWalkSpeed = (bIsSliding ? SlideMaxSpeed : WalkSpeed) * SpeedMultiplier;
+	GetCharacterMovement()->MaxWalkSpeed = bIsSliding ? SlideMaxSpeed : WalkSpeed;
 }
 
 void AApexCharacterBase::OnRep_IsSprinting()
@@ -649,7 +649,7 @@ void AApexCharacterBase::RestoreDefaultMovementSettings()
 	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
 	MovementComponent->GroundFriction = DefaultGroundFriction;
 	MovementComponent->BrakingDecelerationWalking = DefaultBrakingDecelerationWalking;
-	MovementComponent->MaxWalkSpeed = (bIsSprinting ? SprintSpeed : WalkSpeed) * SpeedMultiplier;
+	MovementComponent->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
 	MovementComponent->MaxWalkSpeedCrouched = DefaultMaxWalkSpeedCrouched;
 }
 
@@ -847,6 +847,21 @@ void AApexCharacterBase::HandleDeath()
 {
 	if (HasAuthority())
 	{
+		if (UWorld* World = GetWorld())
+		{
+			if (AApexDeathmatchGameMode* GM = World->GetAuthGameMode<AApexDeathmatchGameMode>())
+			{
+				AController* Killer = LastDamageInstigatorController.Get();
+				const float Dt = World->GetTimeSeconds() - LastDamageTime;
+				if (Dt > DamageAttributionWindowSeconds)
+				{
+					Killer = nullptr;
+				}
+
+				GM->HandleApexPawnKilled(Killer, GetController());
+			}
+		}
+
 		Multicast_OnDeath();
 	}
 }
@@ -865,11 +880,6 @@ void AApexCharacterBase::OnInteract()
 		Iface->OnInteract(this);
 	else
 		ServerInteract(Target);
-}
-
-void AApexCharacterBase::Multicast_GrantAirJump_Implementation()
-{
-		JumpCurrentCount = 0;
 }
 
 void AApexCharacterBase::ServerInteract_Implementation(AActor* TargetInteractable)
