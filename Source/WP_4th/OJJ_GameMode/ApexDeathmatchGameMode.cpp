@@ -25,6 +25,32 @@ void AApexDeathmatchGameMode::BeginPlay()
 	}
 }
 
+void AApexDeathmatchGameMode::HandleApexPawnKilled(AController* Killer, AController* Victim)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	const bool bSuicide = IsValid(Killer) && (Killer == Victim);
+	const bool bEnvKill = !IsValid(Killer);
+
+	if (bSuicide || bEnvKill)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[ApexGM] Kill not credited (Suicide=%d EnvKill=%d) Victim=%s"),
+			bSuicide ? 1 : 0,
+			bEnvKill ? 1 : 0,
+			Victim ? *Victim->GetName() : TEXT("None"));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[ApexGM] Kill registered: Killer=%s Victim=%s"),
+		*Killer->GetName(),
+		*Victim->GetName());
+
+	Super::RegisterKill(Killer, Victim);
+}
+
 void AApexDeathmatchGameMode::SpawnBulletPool()
 {
 	if (!BulletPoolManagerClass)

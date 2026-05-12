@@ -14,6 +14,9 @@ class WP_4TH_API AApexDeathmatchGameMode : public AJunDeathmatchGameMode
 public:
 	AApexDeathmatchGameMode();
 
+	UFUNCTION(BlueprintCallable, Category = "Apex|Deathmatch")
+	void HandleApexPawnKilled(AController* Killer, AController* Victim);
+
 protected:
 	virtual void BeginPlay() override;
 

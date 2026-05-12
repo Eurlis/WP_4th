@@ -15,6 +15,7 @@
 #include "Interaction/InteractionComponent.h"
 #include "Interaction/InteractableInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "OJJ_GameMode/ApexDeathmatchGameMode.h"
 #include "WP_4th.h"
 
 AApexCharacterBase::AApexCharacterBase()
@@ -458,6 +459,12 @@ float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& Dam
 		return 0.f;
 	}
 
+	if (IsValid(EventInstigator))
+	{
+		LastDamageInstigatorController = EventInstigator;
+		LastDamageTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	}
+
 	HealthComponent->ApplyDamage(DamageAmount, false);
 	return DamageAmount;
 }
@@ -840,6 +847,21 @@ void AApexCharacterBase::HandleDeath()
 {
 	if (HasAuthority())
 	{
+		if (UWorld* World = GetWorld())
+		{
+			if (AApexDeathmatchGameMode* GM = World->GetAuthGameMode<AApexDeathmatchGameMode>())
+			{
+				AController* Killer = LastDamageInstigatorController.Get();
+				const float Dt = World->GetTimeSeconds() - LastDamageTime;
+				if (Dt > DamageAttributionWindowSeconds)
+				{
+					Killer = nullptr;
+				}
+
+				GM->HandleApexPawnKilled(Killer, GetController());
+			}
+		}
+
 		Multicast_OnDeath();
 	}
 }
