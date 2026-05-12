@@ -14,6 +14,9 @@ class ACharacter;
 class AController;
 class UPrimitiveComponent;
 class UNiagaraComponent;
+class UNiagaraSystem;
+class USoundBase;
+class UMaterialInterface;
 
 UCLASS(Abstract)
 class WP_4TH_API AProjectileBase : public AActor
@@ -90,6 +93,19 @@ protected:
 	FWeaponData CachedWeaponData;
 
 	// 이펙트 브로드캐스트 RPC (모든 클라이언트 동기화)
+	// 임팩트 에셋들을 RPC 인자로 직접 전달 — 클라 투사체는 풀 한정으로 CachedWeaponData가 비어있을 수 있어 신뢰 불가.
 	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastSpawnImpactEffects(FVector ImpactLocation, FVector ImpactNormal, UPrimitiveComponent* HitComp, bool bHitCharacter);
+	void MulticastSpawnImpactEffects(
+		FVector ImpactLocation,
+		FVector ImpactNormal,
+		UPrimitiveComponent* HitComp,
+		bool bHitCharacter,
+		UNiagaraSystem* ImpactFX,
+		USoundBase* ImpactSound,
+		UMaterialInterface* DecalMaterial,
+		FVector DecalSize,
+		float DecalLifeSpan,
+		UNiagaraSystem* BloodFX,
+		USoundBase* BloodSound
+	);
 };

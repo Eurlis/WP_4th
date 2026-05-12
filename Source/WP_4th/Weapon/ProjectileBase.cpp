@@ -204,7 +204,20 @@ void AProjectileBase::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UP
 	}
 
 	// 임팩트 이펙트 브로드캐스트 (모든 클라이언트 동기화) - Deactivate 전에 호출
-	MulticastSpawnImpactEffects(Hit.ImpactPoint, Hit.ImpactNormal, OtherComp, bHitCharacter);
+	// 클라 투사체는 풀 한정으로 CachedWeaponData가 비어있으므로, 서버가 가진 에셋 포인터를 RPC 인자로 동봉.
+	MulticastSpawnImpactEffects(
+		Hit.ImpactPoint,
+		Hit.ImpactNormal,
+		OtherComp,
+		bHitCharacter,
+		CachedWeaponData.BulletImpactFX,
+		CachedWeaponData.BulletImpactSound,
+		CachedWeaponData.BulletImpactDecal,
+		CachedWeaponData.BulletDecalSize,
+		CachedWeaponData.BulletDecalLifeSpan,
+		CachedWeaponData.BloodImpactFX,
+		CachedWeaponData.BloodImpactSound
+	);
 
 	UE_LOG(LogTemp, Log, TEXT("[Projectile] Hit: %s, Damage=%.1f, Bone=%s"),
 		OtherActor ? *OtherActor->GetName() : TEXT("None"), FinalDamage, *BoneName.ToString());
@@ -217,7 +230,18 @@ void AProjectileBase::SetWeaponData(const FWeaponData& InWeaponData)
 	CachedWeaponData = InWeaponData;
 }
 
-void AProjectileBase::MulticastSpawnImpactEffects_Implementation(FVector ImpactLocation, FVector ImpactNormal, UPrimitiveComponent* HitComp, bool bHitCharacter)
+void AProjectileBase::MulticastSpawnImpactEffects_Implementation(
+	FVector ImpactLocation,
+	FVector ImpactNormal,
+	UPrimitiveComponent* HitComp,
+	bool bHitCharacter,
+	UNiagaraSystem* ImpactFX,
+	USoundBase* ImpactSound,
+	UMaterialInterface* DecalMaterial,
+	FVector DecalSize,
+	float DecalLifeSpan,
+	UNiagaraSystem* BloodFX,
+	USoundBase* BloodSound)
 {
 	UWorld* World = GetWorld();
 	if (!World) return;
@@ -225,21 +249,21 @@ void AProjectileBase::MulticastSpawnImpactEffects_Implementation(FVector ImpactL
 	if (bHitCharacter)
 	{
 		// === 캐릭터 피격: 피 파티클 + 사운드 ===
-		if (CachedWeaponData.BloodImpactFX)
+		if (BloodFX)
 		{
 			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 				World,
-				CachedWeaponData.BloodImpactFX,
+				BloodFX,
 				ImpactLocation,
 				ImpactNormal.Rotation()
 			);
 		}
 
-		if (CachedWeaponData.BloodImpactSound)
+		if (BloodSound)
 		{
 			UGameplayStatics::PlaySoundAtLocation(
 				World,
-				CachedWeaponData.BloodImpactSound,
+				BloodSound,
 				ImpactLocation
 			);
 		}
@@ -249,41 +273,41 @@ void AProjectileBase::MulticastSpawnImpactEffects_Implementation(FVector ImpactL
 	else
 	{
 		// === 벽/바닥: 파티클 + 데칼 + 사운드 ===
-		if (CachedWeaponData.BulletImpactFX)
+		if (ImpactFX)
 		{
 			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
 				World,
-				CachedWeaponData.BulletImpactFX,
+				ImpactFX,
 				ImpactLocation,
 				ImpactNormal.Rotation()
 			);
 		}
 
 		// 데칼은 HitComp에 부착 (움직이는 오브젝트 대응)
-		if (CachedWeaponData.BulletImpactDecal && HitComp)
+		if (DecalMaterial && HitComp)
 		{
 			UDecalComponent* Decal = UGameplayStatics::SpawnDecalAttached(
-				CachedWeaponData.BulletImpactDecal,
-				CachedWeaponData.BulletDecalSize,
+				DecalMaterial,
+				DecalSize,
 				HitComp,
 				NAME_None,
 				ImpactLocation,
 				ImpactNormal.Rotation(),
 				EAttachLocation::KeepWorldPosition,
-				CachedWeaponData.BulletDecalLifeSpan
+				DecalLifeSpan
 			);
 
 			if (Decal)
 			{
-				UE_LOG(LogTemp, Log, TEXT("[Impact] Decal spawned (life: %.1fs)"), CachedWeaponData.BulletDecalLifeSpan);
+				UE_LOG(LogTemp, Log, TEXT("[Impact] Decal spawned (life: %.1fs)"), DecalLifeSpan);
 			}
 		}
 
-		if (CachedWeaponData.BulletImpactSound)
+		if (ImpactSound)
 		{
 			UGameplayStatics::PlaySoundAtLocation(
 				World,
-				CachedWeaponData.BulletImpactSound,
+				ImpactSound,
 				ImpactLocation
 			);
 		}
