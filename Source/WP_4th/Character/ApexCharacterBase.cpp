@@ -1179,6 +1179,8 @@ void AApexCharacterBase::ServerDropCurrentWeapon_Implementation()
 			CurrentWeapon->Destroy();
 			CurrentWeapon = nullptr;
 		}
+		// 서버 자기 HUD 클리어 (클라는 CurrentWeapon=nullptr OnRep 경로로 동일 호출)
+		BP_OnWeaponEquipped(nullptr);
 		if (CurrentSlot == EEquippedSlot::Grenade)
 		{
 			CurrentSlot = EEquippedSlot::Weapon;
