@@ -4,6 +4,15 @@
 #include "Components/ActorComponent.h"
 #include "HealthComponent.generated.h"
 
+UENUM(BlueprintType)
+enum class EHitSoundType : uint8
+{
+	FleshHit UMETA(DisplayName="Flesh Hit"),
+	ShieldHit UMETA(DisplayName="Shield Hit"),
+	ShieldBroken UMETA(DisplayName="Shield Broken"),
+	Downed UMETA(DisplayName="Downed"),
+};
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDeath);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnHealthChanged, float, NewHealth, float, MaxHealth);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnShieldChanged, float, NewShield, float, MaxShield);
@@ -39,7 +48,7 @@ public:
 	FOnShieldChanged OnShieldChanged;
 
 	UFUNCTION(BlueprintCallable, Category = "Health")
-	void ApplyDamage(float RawDamage, bool bIsHeadshot);
+	EHitSoundType ApplyDamage(float RawDamage, bool bIsHeadshot);
 
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void ApplyHealthDamage(float RawDamage);

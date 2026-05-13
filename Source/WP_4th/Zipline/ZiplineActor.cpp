@@ -41,10 +41,11 @@ AZiplineActor::AZiplineActor()
 
 	CableComp = CreateDefaultSubobject<UCableComponent>(TEXT("CableComp"));
 	CableComp->SetupAttachment(StartPoint);
-	CableComp->bAttachEnd  = false;
-	CableComp->NumSegments = 16;
-	CableComp->CableWidth  = 4.f;
-	CableComp->CableLength = 500.f;
+	CableComp->bAttachEnd        = true;  // 끝점 고정
+	CableComp->CableGravityScale = 0.f;  // 중력 제거 처짐 없음
+	CableComp->NumSegments       = 1;    // 세그먼트 1개 = 완전 일자
+	CableComp->CableWidth        = 4.f;
+	CableComp->CableLength       = 500.f;
 
 	StartPoleMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StartPoleMesh"));
 	StartPoleMesh->SetupAttachment(StartPoint);

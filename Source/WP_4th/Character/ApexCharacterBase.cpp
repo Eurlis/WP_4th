@@ -17,6 +17,7 @@
 #include "Net/UnrealNetwork.h"
 #include "OJJ_GameMode/ApexDeathmatchGameMode.h"
 #include "WP_4th.h"
+#include "Kismet/GameplayStatics.h"
 
 AApexCharacterBase::AApexCharacterBase()
 {
@@ -465,7 +466,29 @@ float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& Dam
 		LastDamageTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	}
 
-	HealthComponent->ApplyDamage(DamageAmount, false);
+	/*HealthComponent->ApplyDamage(DamageAmount, false);*/
+
+	EHitSoundType HitType = HealthComponent->ApplyDamage(DamageAmount, false);
+
+	if (EventInstigator)
+	{
+		if (AApexCharacterBase* Attacker = Cast<AApexCharacterBase>(EventInstigator->GetPawn()))
+		{
+			Attacker->ClientPlayHitSound(HitType);
+		}
+	}
+	if (EventInstigator)
+	{
+		if (AApexCharacterBase* Attacker = Cast<AApexCharacterBase>(EventInstigator->GetPawn()))
+		{
+			Attacker->ClientShowEnemyHealth(
+				this,
+				HealthComponent->Health,
+				HealthComponent->MaxHealth,
+				HealthComponent->Shield,
+				HealthComponent->MaxShield);
+		}
+	}
 	return DamageAmount;
 }
 
@@ -880,6 +903,29 @@ void AApexCharacterBase::OnInteract()
 		Iface->OnInteract(this);
 	else
 		ServerInteract(Target);
+}
+
+void AApexCharacterBase::ClientShowEnemyHealth_Implementation(AActor* EnemyActor, float HP, float MaxHp, float Shield,
+	float MaxShield)
+{
+	BP_ShowEnemyHealth(EnemyActor, HP, MaxHp, Shield, MaxShield);
+}
+
+void AApexCharacterBase::ClientPlayHitSound_Implementation(EHitSoundType HitSoundType)
+{
+	USoundBase* Sound = nullptr;
+	switch (HitSoundType)
+	{
+	case EHitSoundType::FleshHit: Sound = HitSound_fleshHit; break;
+	case EHitSoundType::ShieldHit: Sound = HitSound_ShieldHit; break;
+	case EHitSoundType::ShieldBroken: Sound = HitSound_ShieldBroken; break;
+	case EHitSoundType::Downed: Sound = HitSound_Downed; break;
+	}
+	if (Sound)
+	{
+		float Pitch = FMath::RandRange(0.9f, 1.1f);
+		UGameplayStatics::PlaySound2D(this, Sound, 1.f, Pitch);
+	}
 }
 
 void AApexCharacterBase::Multicast_GrantAirJump_Implementation()

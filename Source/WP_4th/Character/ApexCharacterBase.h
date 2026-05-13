@@ -7,6 +7,7 @@
 #include "MotionWarping/Public/MotionWarping.h"
 #include "Character/Components/ZiplineComp/ZiplineRiderComponent.h"
 #include "Interaction/AmmoReserveOwnerInterface.h"
+#include "Character/Components/HPComp/HealthComponent.h"
 #include "Weapon/WeaponTypes.h"
 #include "ApexCharacterBase.generated.h"
 
@@ -494,5 +495,28 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multicast_GrantAirJump();
 
+//Hit Sound
+protected:
+	UFUNCTION(Client, Reliable)
+	void ClientPlayHitSound(EHitSoundType HitSoundType);
 
+	UPROPERTY(EditDefaultsOnly, Category="Sound|HitFeedback")
+	TObjectPtr<USoundBase> HitSound_fleshHit;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound|HitFeedback")
+	TObjectPtr<USoundBase> HitSound_ShieldHit;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound|HitFeedback")
+	TObjectPtr<USoundBase> HitSound_ShieldBroken;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Sound|HitFeedback")
+	TObjectPtr<USoundBase> HitSound_Downed;
+
+
+	// HP UI
+	UFUNCTION(Client, Reliable)
+	void ClientShowEnemyHealth(AActor* EnemyActor, float HP, float MaxHp, float Shield, float MaxShield);
+
+	UFUNCTION(BlueprintImplementableEvent, Category="UI")
+	void BP_ShowEnemyHealth(AActor* EnemyActor, float HP, float MaxHp, float Shield, float MaxShield);
 };

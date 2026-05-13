@@ -6,6 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "ZiplineRiderComponent.generated.h"
 
+
 class AZiplineActor;
 class UCharacterMovementComponent;
 

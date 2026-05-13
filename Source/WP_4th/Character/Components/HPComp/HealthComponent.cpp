@@ -24,18 +24,22 @@ void UHealthComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(UHealthComponent, Shield);
 }
 
-void UHealthComponent::ApplyDamage(float RawDamage, bool bIsHeadshot)
+EHitSoundType UHealthComponent::ApplyDamage(float RawDamage, bool bIsHeadshot)
 {
-	if (!GetOwner()->HasAuthority()) return;
-	if (IsDead()) return;
+	if (!GetOwner()->HasAuthority()) return EHitSoundType::FleshHit;
+	if (IsDead()) return EHitSoundType::FleshHit;
 
+	EHitSoundType HitType = EHitSoundType::FleshHit;
 	float FinalDamage = RawDamage;
+
 	if (Shield > 0.f)
 	{
 		float ShieldDamage = FMath::Min(Shield, FinalDamage);
 		Shield -= ShieldDamage;
 		FinalDamage -= ShieldDamage;
 		OnShieldChanged.Broadcast(Shield, MaxShield);
+
+		HitType = (Shield <= 0.f) ? EHitSoundType::ShieldBroken : EHitSoundType::ShieldHit;
 	}
 
 	Health = FMath::Max(0.f, Health - FinalDamage);
@@ -43,8 +47,11 @@ void UHealthComponent::ApplyDamage(float RawDamage, bool bIsHeadshot)
 
 	if (IsDead())
 	{
+		HitType = EHitSoundType::Downed;
 		OnDeath.Broadcast();
 	}
+
+	return HitType;
 }
 
 void UHealthComponent::ApplyHealthDamage(float RawDamage)
