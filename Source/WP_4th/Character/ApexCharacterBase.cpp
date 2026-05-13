@@ -5,6 +5,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/DamageEvents.h"
+#include "Character/ApexPlayerController.h"
 #include "EnhancedInputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputActionValue.h"
@@ -908,6 +909,11 @@ void AApexCharacterBase::OnInteract()
 void AApexCharacterBase::ClientShowEnemyHealth_Implementation(AActor* EnemyActor, float HP, float MaxHp, float Shield,
 	float MaxShield)
 {
+	AApexPlayerController* PC = Cast<AApexPlayerController>(GetController());
+	if (PC)
+	{
+		PC->ShowEnemyHealthBar(EnemyActor, HP, MaxHp, Shield, MaxShield);
+	}
 	BP_ShowEnemyHealth(EnemyActor, HP, MaxHp, Shield, MaxShield);
 }
 
