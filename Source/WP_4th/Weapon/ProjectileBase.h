@@ -108,4 +108,12 @@ protected:
 		UNiagaraSystem* BloodFX,
 		USoundBase* BloodSound
 	);
+
+	// 트레이서 활성화 브로드캐스트 — 클라 풀 인스턴스는 CachedWeaponData가 비어있으므로 서버가 에셋 포인터를 직접 전달.
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastActivateTracer(UNiagaraSystem* TracerFX);
+
+	// 투사체 비활성화 시각 처리 브로드캐스트 — 서버 OnHit/수명만료 후 모든 클라이언트에서 잔류 총알 제거.
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastDeactivate();
 };
