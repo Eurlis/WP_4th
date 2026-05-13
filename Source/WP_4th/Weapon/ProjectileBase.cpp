@@ -109,21 +109,11 @@ void AProjectileBase::Activate(FVector SpawnLocation, FVector Direction, float I
 	SetActorEnableCollision(true);
 	SetActorTickEnabled(true);
 
-	// Tracer 활성화 — 풀 재사용 시 이전 ribbon strand 잔재 차단
-	if (TracerComponent)
+	// Tracer 활성화 — 서버가 에셋 포인터를 RPC 인자로 동봉하여 모든 클라이언트에 브로드캐스트.
+	// 클라 풀 인스턴스는 CachedWeaponData가 비어있으므로 직접 참조 불가.
+	if (HasAuthority())
 	{
-		if (CachedWeaponData.BulletTracerFX)
-		{
-			TracerComponent->DeactivateImmediate();  // 잔류 strand 강제 클리어 (동기)
-			TracerComponent->SetAsset(CachedWeaponData.BulletTracerFX);
-			TracerComponent->SetVisibility(true);
-			TracerComponent->ResetSystem();
-			TracerComponent->Activate(true);
-		}
-		else
-		{
-			TracerComponent->DeactivateImmediate();
-		}
+		MulticastActivateTracer(CachedWeaponData.BulletTracerFX);
 	}
 
 	if (BulletMesh)
@@ -143,24 +133,23 @@ void AProjectileBase::Deactivate()
 {
 	bIsActive = false;
 
+	// 서버 권한 로직: 이동 정지 + 타이머 정리 + 위치 풀 대기 위치로 이동
 	if (ProjectileMovement)
 	{
 		ProjectileMovement->StopMovementImmediately();
 		ProjectileMovement->Deactivate();
 	}
 
-	if (TracerComponent)
-	{
-		TracerComponent->DeactivateImmediate();  // lazy → 동기 정리, 잔류 strand 즉시 제거
-		TracerComponent->SetVisibility(false);   // 렌더 즉시 차단
-	}
-
-	SetActorHiddenInGame(true);
-	SetActorEnableCollision(false);
 	SetActorTickEnabled(false);
 	SetActorLocation(FVector(0.f, 0.f, -10000.f));
 
 	GetWorldTimerManager().ClearTimer(LifeSpanTimerHandle);
+
+	// 시각/충돌 처리: 모든 클라이언트에 브로드캐스트 (클라 화면 잔류 총알 제거)
+	if (HasAuthority())
+	{
+		MulticastDeactivate();
+	}
 }
 
 void AProjectileBase::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
@@ -228,6 +217,33 @@ void AProjectileBase::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UP
 void AProjectileBase::SetWeaponData(const FWeaponData& InWeaponData)
 {
 	CachedWeaponData = InWeaponData;
+}
+
+void AProjectileBase::MulticastActivateTracer_Implementation(UNiagaraSystem* TracerFX)
+{
+	if (!TracerComponent) return;
+
+	TracerComponent->DeactivateImmediate();  // 잔류 strand 강제 클리어 (풀 재사용 대비)
+
+	if (TracerFX)
+	{
+		TracerComponent->SetAsset(TracerFX);
+		TracerComponent->SetVisibility(true);
+		TracerComponent->ResetSystem();
+		TracerComponent->Activate(true);
+	}
+}
+
+void AProjectileBase::MulticastDeactivate_Implementation()
+{
+	if (TracerComponent)
+	{
+		TracerComponent->DeactivateImmediate();  // 잔류 strand 즉시 제거
+		TracerComponent->SetVisibility(false);   // 렌더 즉시 차단
+	}
+
+	SetActorEnableCollision(false);
+	SetActorHiddenInGame(true);
 }
 
 void AProjectileBase::MulticastSpawnImpactEffects_Implementation(

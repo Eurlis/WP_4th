@@ -156,10 +156,17 @@ AApexCharacterBase::AApexCharacterBase()
 
 void AApexCharacterBase::OnRep_CurrentWeapon()
 {
-	// 이전 무기 정리: 서버 Destroy 도달 전이거나 다른 무기로 바뀐 경우 detach (회귀 #5 ghost 차단)
+	// 이전 무기 정리: 서버 Destroy 도달 전이거나 다른 무기로 바뀐 경우 클라에서 즉시 시각 제거 (회귀 #5 ghost 차단)
+	// CurrentWeapon == nullptr 전이(드롭) 시에도 PreviousWeapon 메시 잔류 방지
 	if (IsValid(PreviousWeapon) && PreviousWeapon != CurrentWeapon)
 	{
+		PreviousWeapon->SetActorHiddenInGame(true);
+		PreviousWeapon->SetActorEnableCollision(false);
 		PreviousWeapon->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		if (PreviousWeapon->HasAuthority())
+		{
+			PreviousWeapon->Destroy();
+		}
 	}
 
 	if (CurrentWeapon)
