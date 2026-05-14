@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "WP_4thPlayerController.h"
+#include "Components/HPComp/HealthComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "ApexPlayerController.generated.h"
 
@@ -18,4 +19,8 @@ class WP_4TH_API AApexPlayerController : public AWP_4thPlayerController
 public:
 	UFUNCTION(BlueprintImplementableEvent, Category="UI")
 	void ShowEnemyHealthBar(AActor* EnemyActor, float HP, float MaxHp, float Shield, float MaxShield);
+	UFUNCTION(BlueprintImplementableEvent, Category="UI")
+	void ShowHitMarker(EHitSoundType HitSoundType);
+
+
 };

@@ -519,4 +519,24 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent, Category="UI")
 	void BP_ShowEnemyHealth(AActor* EnemyActor, float HP, float MaxHp, float Shield, float MaxShield);
+
+	// Skill, Ult UI
+public:
+	UPROPERTY(BlueprintReadOnly, Category="Ability")
+	float TacticalCooldownRemaining = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="Ability")
+	float TacticalCooldownMax = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="UI|Ability")
+	TObjectPtr<UTexture2D> TacticalIcon;
+
+	UPROPERTY(BlueprintReadOnly, Category="Ability")
+	float UltCooldownRemaining = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category= "Ability")
+	float UltCooldownMax = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="UI|Ability")
+	TObjectPtr<UTexture2D> UltIcon;
 };
