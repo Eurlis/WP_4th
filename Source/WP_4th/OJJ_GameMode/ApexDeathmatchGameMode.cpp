@@ -3,7 +3,12 @@
 #include "ApexDeathmatchGameState.h"
 #include "ApexDeathmatchPlayerState.h"
 #include "Engine/World.h"
+#include "GameFramework/Controller.h"
+#include "GameFramework/PlayerState.h"
+#include "JunGame/JunDeathmatchGameState.h"
+#include "JunGame/JunDeathmatchPlayerState.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 #include "Weapon/BulletPoolManager.h"
 
 AApexDeathmatchGameMode::AApexDeathmatchGameMode()
@@ -13,6 +18,10 @@ AApexDeathmatchGameMode::AApexDeathmatchGameMode()
 
 	BulletPoolManagerClass = nullptr;
 	SpawnedBulletPool = nullptr;
+
+	bAllowRespawn = false;          // 부모 시스템 비활성화 (이중 리스폰 차단)
+	bApexAllowRespawn = true;       // Apex 자체 리스폰 시스템 활성화
+	ApexRespawnDelay = 5.0f;
 }
 
 void AApexDeathmatchGameMode::BeginPlay()
@@ -49,6 +58,126 @@ void AApexDeathmatchGameMode::HandleApexPawnKilled(AController* Killer, AControl
 		*Victim->GetName());
 
 	Super::RegisterKill(Killer, Victim);
+
+	if (IsMatchInProgress() && bApexAllowRespawn && IsValid(Victim))
+	{
+		RequestRespawn(Victim);
+	}
+}
+
+void AApexDeathmatchGameMode::RequestRespawn(AController* EliminatedController)
+{
+	if (!HasAuthority() || !IsValid(EliminatedController) || !bApexAllowRespawn)
+	{
+		return;
+	}
+	if (!IsMatchInProgress())
+	{
+		return;
+	}
+
+	TWeakObjectPtr<AController> WeakCtrl(EliminatedController);
+	FTimerHandle& Handle = RespawnTimers.FindOrAdd(WeakCtrl);
+	GetWorldTimerManager().ClearTimer(Handle); // 중복 방지
+
+	FTimerDelegate Del;
+	Del.BindUObject(this, &AApexDeathmatchGameMode::RespawnController, EliminatedController);
+	GetWorldTimerManager().SetTimer(Handle, Del, FMath::Max(0.1f, ApexRespawnDelay), false);
+}
+
+void AApexDeathmatchGameMode::RespawnController(AController* EliminatedController)
+{
+	RespawnTimers.Remove(TWeakObjectPtr<AController>(EliminatedController));
+
+	if (!HasAuthority() || !IsValid(EliminatedController))
+	{
+		return;
+	}
+	if (!IsMatchInProgress() || !bApexAllowRespawn)
+	{
+		return;
+	}
+
+	RestartPlayer(EliminatedController);
+}
+
+void AApexDeathmatchGameMode::ClearAllRespawnTimers()
+{
+	if (UWorld* W = GetWorld())
+	{
+		for (auto& Pair : RespawnTimers)
+		{
+			W->GetTimerManager().ClearTimer(Pair.Value);
+		}
+	}
+	RespawnTimers.Empty();
+}
+
+void AApexDeathmatchGameMode::HandleMatchHasStarted()
+{
+	Super::HandleMatchHasStarted();
+	if (!HasAuthority())
+	{
+		return;
+	}
+	bMatchTimeExpired = false;
+	GetWorldTimerManager().SetTimer(
+		MatchTimerHandle, this,
+		&AApexDeathmatchGameMode::OnMatchTimeUp,
+		FMath::Max(1.f, MatchDuration), false);
+	UE_LOG(LogTemp, Log, TEXT("[ApexGM] Match timer started: %.1fs"), MatchDuration);
+}
+
+void AApexDeathmatchGameMode::OnMatchTimeUp()
+{
+	if (!HasAuthority() || bMatchTimeExpired)
+	{
+		return;
+	}
+	bMatchTimeExpired = true;
+	bApexAllowRespawn = false;
+	ClearAllRespawnTimers();
+
+	AController* Winner = nullptr;
+	int32 WinnerKills = 0;
+
+	// GameState/PlayerState 에 GetCurrentLeader 가 없으므로 PlayerArray 직접 순회.
+	// 매치당 1회 호출이라 비용 무시 가능.
+	if (AGameStateBase* GS = GetGameState<AGameStateBase>())
+	{
+		AJunDeathmatchPlayerState* TopPS = nullptr;
+		for (APlayerState* PS : GS->PlayerArray)
+		{
+			AJunDeathmatchPlayerState* JunPS = Cast<AJunDeathmatchPlayerState>(PS);
+			if (!JunPS)
+			{
+				continue;
+			}
+			const int32 Kills = JunPS->GetEliminations();
+			if (!TopPS || Kills > WinnerKills)
+			{
+				TopPS = JunPS;
+				WinnerKills = Kills;
+			}
+		}
+		if (TopPS)
+		{
+			Winner = TopPS->GetOwner<AController>();
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[ApexGM] Match time up — Winner=%s Kills=%d"),
+		Winner ? *Winner->GetName() : TEXT("None"), WinnerKills);
+
+	BP_OnMatchEnded(Winner, WinnerKills);
+	EndMatch();
+}
+
+void AApexDeathmatchGameMode::HandleMatchHasEnded()
+{
+	GetWorldTimerManager().ClearTimer(MatchTimerHandle);
+	ClearAllRespawnTimers();
+	Super::HandleMatchHasEnded();
 }
 
 void AApexDeathmatchGameMode::SpawnBulletPool()
