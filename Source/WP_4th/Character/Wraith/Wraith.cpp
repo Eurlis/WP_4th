@@ -165,6 +165,7 @@ void AWraith::ExitVoid()
 	if (HasAuthority())
 	{
 		bTacticalOnCooldown = true;
+		TacticalCooldownRemaining = TacticalCooldown;
 		GetWorldTimerManager().SetTimer(TacticalCooldownTimer,[this]()
 		{
 			bTacticalOnCooldown = false;
@@ -179,6 +180,7 @@ void AWraith::DeactivatePortals()
 	if (PortalB) { PortalB->Destroy(); PortalB = nullptr; }
 
 	bUltimateOnCooldown = true;
+	UltCooldownRemaining = UltimateCooldown;
 	GetWorldTimerManager().SetTimer(UltimateCooldownTimer, [this]()
 	{
 		bUltimateOnCooldown = false;

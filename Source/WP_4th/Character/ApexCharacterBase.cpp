@@ -268,7 +268,9 @@ void AApexCharacterBase::Tick(float DeltaTime)
 	if (IsLocallyControlled())
 	{
 		if (TacticalCooldownRemaining > 0.f)
-			TacticalCooldownRemaining = FMath::Max(0.f, TacticalCooldownRemaining)
+			TacticalCooldownRemaining = FMath::Max(0.f, TacticalCooldownRemaining - DeltaTime);
+		if (UltCooldownRemaining > 0.f)
+			UltCooldownRemaining = FMath::Max(0.f, UltCooldownRemaining - DeltaTime);
 	}
 }
 
