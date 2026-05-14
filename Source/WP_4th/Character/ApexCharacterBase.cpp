@@ -272,6 +272,13 @@ void AApexCharacterBase::Tick(float DeltaTime)
 		FirstPersonCameraComponent->SetFieldOfView(
 			FMath::FInterpTo(FirstPersonCameraComponent->FieldOfView, TargetFOV, DeltaTime, ADSInterpSpeed));
 	}
+	if (IsLocallyControlled())
+	{
+		if (TacticalCooldownRemaining > 0.f)
+			TacticalCooldownRemaining = FMath::Max(0.f, TacticalCooldownRemaining - DeltaTime);
+		if (UltCooldownRemaining > 0.f)
+			UltCooldownRemaining = FMath::Max(0.f, UltCooldownRemaining - DeltaTime);
+	}
 }
 
 void AApexCharacterBase::BeginPlay()
@@ -463,6 +470,7 @@ void AApexCharacterBase::DoJumpEnd()
 float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 	AController* EventInstigator, AActor* DamageCauser)
 {
+
 	if (!HasAuthority() || !IsValid(HealthComponent))
 	{
 		return 0.f;
@@ -480,6 +488,7 @@ float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& Dam
 
 	if (EventInstigator)
 	{
+		// Hit Enum에 따른 Sound Play
 		if (AApexCharacterBase* Attacker = Cast<AApexCharacterBase>(EventInstigator->GetPawn()))
 		{
 			Attacker->ClientPlayHitSound(HitType);
@@ -487,6 +496,7 @@ float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& Dam
 	}
 	if (EventInstigator)
 	{
+		// 체력 바 UI
 		if (AApexCharacterBase* Attacker = Cast<AApexCharacterBase>(EventInstigator->GetPawn()))
 		{
 			Attacker->ClientShowEnemyHealth(
@@ -938,6 +948,11 @@ void AApexCharacterBase::ClientPlayHitSound_Implementation(EHitSoundType HitSoun
 	{
 		float Pitch = FMath::RandRange(0.9f, 1.1f);
 		UGameplayStatics::PlaySound2D(this, Sound, 1.f, Pitch);
+	}
+	// 타격 UI
+	if (AApexPlayerController* PC = Cast<AApexPlayerController>(GetController()))
+	{
+		PC->ShowHitMarker(HitSoundType);
 	}
 }
 

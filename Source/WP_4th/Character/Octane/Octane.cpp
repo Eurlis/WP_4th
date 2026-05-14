@@ -80,7 +80,7 @@ void AOctane::EnterStim()
 {
 	bStimActive = true;
 	bStimOnCooldown = true;
-
+	TacticalCooldownRemaining = StimCooldown;
 	SpeedMultiplier = bIsSprinting ? StimSprintMultiplier : StimWalkMultiplier;
 	GetCharacterMovement()->MaxWalkSpeed = (bIsSprinting ? SprintSpeed : WalkSpeed) * SpeedMultiplier;
 
@@ -172,6 +172,7 @@ void AOctane::Server_ActivateUltimate_Implementation()
 	GetWorld()->SpawnActor<AOctaneLaunchPad>(LaunchPadClass, SpawnLoc, SpawnRot);
 
 	bUltimateOnCooldown = true;
+	UltCooldownRemaining = UltimateCooldown;
 	GetWorldTimerManager().SetTimer(
 		UltimateCooldownHandle,
 		FTimerDelegate::CreateLambda([this]() {bUltimateOnCooldown = false;}),
