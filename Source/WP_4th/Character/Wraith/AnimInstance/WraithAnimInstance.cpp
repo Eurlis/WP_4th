@@ -10,12 +10,12 @@
 void UWraithAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
 	Super::NativeUpdateAnimation(DeltaSeconds);
-	
+
 	if (!OwnerCharacter)
 		OwnerCharacter = Cast<AWraith>(TryGetPawnOwner());
 	if (!OwnerCharacter) return;
 
-	
+
 	Speed         = OwnerCharacter->GetVelocity().Size2D();
 	AnimDirection = UKismetAnimationLibrary::CalculateDirection(OwnerCharacter->GetVelocity(), OwnerCharacter->GetActorRotation());
 	bIsWalking = Speed > 0.f && OwnerCharacter->GetCharacterMovement()->IsMovingOnGround();
@@ -32,8 +32,8 @@ void UWraithAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 	// Left hand IK: 총의 left_hand_socket → 캐릭터 메쉬 컴포넌트 공간으로 변환
 	AWeaponBase* Weapon = OwnerCharacter->CurrentWeapon;
-	
-	if (Weapon)
+
+	if (Weapon && OwnerCharacter->CurrentSlot != EEquippedSlot::Grenade)
 	{
 		WeaponType = Weapon->Category;
 	}
@@ -47,6 +47,6 @@ void UWraithAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		// 왼손 총기 Attach
 		FTransform SocketWorldL = Weapon->WeaponMesh1P->GetSocketTransform(FName("left_hand_socket"));
 		LeftHandLocation = SocketWorldL.GetRelativeTransform(FPMesh->GetComponentTransform()).GetLocation();
-		
+
 	}
 }

@@ -440,6 +440,7 @@ private:
 	void StartThrowableAim();
 	void StopThrowableAim();
 	bool bIsAimingThrowable = false;
+	FVector PendingThrowDirection = FVector::ZeroVector;
 	float LastDropTime = -10.f;
 	static constexpr float DropCooldown = 0.3f;
 
@@ -533,4 +534,30 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Ability")
 	TObjectPtr<UTexture2D> UltIcon;
+
+	//Throw
+	UPROPERTY(EditAnywhere, Category= "Throwable|Anim")
+	UAnimMontage* ThrowMontage;
+
+	UPROPERTY(EditAnywhere, Category= "Throwable|Anim")
+	UAnimMontage* HoldMontage;
+
+	UFUNCTION()
+	void OnThrowAnimNotify();
+
+	UFUNCTION(Server, Reliable)
+	void Server_StartThrowableAim();
+
+	UFUNCTION(Server, Reliable)
+	void Server_StopThrowableAim();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_PlayHoldAim();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_StopHoldAim();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_PlayThrowAnim();
 };
+

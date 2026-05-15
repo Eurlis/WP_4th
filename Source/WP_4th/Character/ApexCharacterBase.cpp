@@ -848,8 +848,15 @@ void AApexCharacterBase::StopFire()
 			ThrowDirection.Z += 0.2f;
 			ThrowDirection.Normalize();
 		}
-
-		ServerThrowGrenade(ThrowDirection);
+		PendingThrowDirection = ThrowDirection;
+		if (ThrowMontage)
+		{
+			PlayAnimMontage(ThrowMontage);
+		}
+		else
+		{
+			ServerThrowGrenade(ThrowDirection);
+		}
 		return;
 	}
 
@@ -869,6 +876,7 @@ void AApexCharacterBase::ServerThrowGrenade_Implementation(FVector ThrowDirectio
 	// ThrowDirection은 호환성 인자 — 현재 ThrowGrenade()가 자체 카메라 방향 계산 사용
 	// (향후 ThrowGrenade(FVector) 오버로드 분리 시 클라 방향 전달 가능)
 	ThrowGrenade();
+	Multicast_PlayThrowAnim();
 
 	if (GetTotalGrenadeCount() <= 0)
 	{
@@ -923,8 +931,51 @@ void AApexCharacterBase::OnInteract()
 		ServerInteract(Target);
 }
 
+void AApexCharacterBase::OnThrowAnimNotify()
+{
+	if (!PendingThrowDirection.IsNearlyZero())
+	{
+		ServerThrowGrenade(PendingThrowDirection);
+		PendingThrowDirection = FVector::ZeroVector;
+	}
+}
+
+void AApexCharacterBase::Multicast_PlayThrowAnim_Implementation()
+{
+	if (IsLocallyControlled()) return;
+	if (ThrowMontage)
+		PlayAnimMontage(ThrowMontage);
+
+}
+
+void AApexCharacterBase::Multicast_StopHoldAim_Implementation()
+{
+	if (IsLocallyControlled()) return;
+	if (HoldMontage)
+		StopAnimMontage(HoldMontage);
+
+}
+
+void AApexCharacterBase::Multicast_PlayHoldAim_Implementation()
+{
+	if (IsLocallyControlled()) return;  // 로컬은 이미 재생 중
+	if (HoldMontage)
+		PlayAnimMontage(HoldMontage);
+
+}
+
+void AApexCharacterBase::Server_StopThrowableAim_Implementation()
+{
+	Multicast_StopHoldAim();
+}
+
+void AApexCharacterBase::Server_StartThrowableAim_Implementation()
+{
+	Multicast_PlayHoldAim();
+}
+
 void AApexCharacterBase::ClientShowEnemyHealth_Implementation(AActor* EnemyActor, float HP, float MaxHp, float Shield,
-	float MaxShield)
+                                                              float MaxShield)
 {
 	AApexPlayerController* PC = Cast<AApexPlayerController>(GetController());
 	if (PC)
@@ -1105,7 +1156,18 @@ void AApexCharacterBase::SwitchToSlot_Internal(int32 SlotIndex)
 	}
 	else
 	{
-		if (IsSlotEmpty(SlotIndex)) return;
+		if (IsSlotEmpty(SlotIndex))
+		{
+			ActiveSlotIndex = SlotIndex;
+			CurrentSlot = EEquippedSlot::Weapon;
+			if (CurrentWeapon)
+			{
+				CurrentWeapon->OnUnequipped();
+				CurrentWeapon->Destroy();
+				CurrentWeapon = nullptr;
+			}
+			return;
+		}
 		ActiveSlotIndex = SlotIndex;
 		SwitchWeaponByID(WeaponSlots[SlotIndex]);
 	}
@@ -1143,10 +1205,6 @@ void AApexCharacterBase::ServerSwitchToSlot_Implementation(int32 SlotIndex)
 	if (SlotIndex == (int32)EWeaponSlotType::Throwable)
 	{
 		if (GetTotalGrenadeCount() <= 0) return;
-	}
-	else
-	{
-		if (IsSlotEmpty(SlotIndex)) return;
 	}
 	SwitchToSlot_Internal(SlotIndex);
 }
@@ -1350,11 +1408,17 @@ void AApexCharacterBase::ThrowGrenade()
 void AApexCharacterBase::StartThrowableAim()
 {
 	bIsAimingThrowable = true;
+	if (HoldMontage)
+		PlayAnimMontage(HoldMontage);
+	Server_StartThrowableAim();
 }
 
 void AApexCharacterBase::StopThrowableAim()
 {
 	bIsAimingThrowable = false;
+	if (HoldMontage)
+		StopAnimMontage(HoldMontage);
+	Server_StopThrowableAim();
 }
 
 // ==================== Ammo Pool ====================
