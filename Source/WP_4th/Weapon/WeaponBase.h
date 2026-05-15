@@ -221,6 +221,9 @@ public:
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayEquipSound();
 
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayReloadSound();
+
 protected:
 	FTimerHandle FireTimerHandle;
 	FTimerHandle ReloadTimerHandle;

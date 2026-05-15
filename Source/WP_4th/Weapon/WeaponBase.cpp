@@ -792,6 +792,9 @@ void AWeaponBase::ServerStartReload_Implementation()
 	bIsReloading = true;
 	StopFire();
 
+	// 사운드 재생 (모든 클라이언트로 전파)
+	MulticastPlayReloadSound();
+
 	UE_LOG(LogTemp, Warning, TEXT("[Reload] Started - duration: %.2fs"), ReloadTime);
 
 	GetWorldTimerManager().SetTimer(ReloadTimerHandle, this, &AWeaponBase::FinishReload, ReloadTime, false);
@@ -922,6 +925,34 @@ void AWeaponBase::MulticastPlayEquipSound_Implementation()
 	{
 		UGameplayStatics::SpawnSoundAttached(
 			CurrentWeaponData.EquipSound,
+			OwningCharacter->GetRootComponent(),
+			NAME_None,
+			FVector::ZeroVector,
+			EAttachLocation::KeepRelativeOffset,
+			false,
+			1.0f, 1.0f, 0.0f,
+			nullptr, nullptr,
+			true
+		);
+	}
+}
+
+void AWeaponBase::MulticastPlayReloadSound_Implementation()
+{
+	if (!CurrentWeaponData.ReloadSound || !OwningCharacter) return;
+
+	if (OwningCharacter->IsLocallyControlled())
+	{
+		UGameplayStatics::PlaySound2D(
+			OwningCharacter,
+			CurrentWeaponData.ReloadSound,
+			1.0f
+		);
+	}
+	else
+	{
+		UGameplayStatics::SpawnSoundAttached(
+			CurrentWeaponData.ReloadSound,
 			OwningCharacter->GetRootComponent(),
 			NAME_None,
 			FVector::ZeroVector,
