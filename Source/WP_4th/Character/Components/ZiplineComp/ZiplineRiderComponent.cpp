@@ -102,8 +102,16 @@ void UZiplineRiderComponent::Server_Detach_Implementation(bool bJump)
 void UZiplineRiderComponent::OnRep_IsRiding()
 {
 
-	if (bIsRiding) ApplyZiplinePhysics();
-	else RestorePhysics();
+	if (bIsRiding)
+	{
+		ApplyZiplinePhysics();
+		if (MoveComp) MoveComp->bUseControllerDesiredRotation = false;
+	}
+	else
+	{
+		RestorePhysics();
+		if (MoveComp) MoveComp->bUseControllerDesiredRotation = true;
+	}
 }
 
 void UZiplineRiderComponent::TickZiplineMovement(float DeltaTime)
@@ -133,16 +141,16 @@ void UZiplineRiderComponent::TickZiplineMovement(float DeltaTime)
 void UZiplineRiderComponent::ApplyZiplinePhysics()
 {
 	if (!MoveComp) return;
-	MoveComp->GravityScale = SavedGravityScale;
-	MoveComp->SetMovementMode(MOVE_Falling);
-
+	SavedGravityScale = MoveComp->GravityScale;
+	MoveComp->GravityScale = 0.f;
+	MoveComp->SetMovementMode(MOVE_Flying);
 }
 
 void UZiplineRiderComponent::RestorePhysics()
 {
 	if (!MoveComp) return;
 	MoveComp->GravityScale = SavedGravityScale;
-	MoveComp->SetMovementMode(MOVE_Falling);
+	MoveComp->SetMovementMode(MOVE_Walking);
 }
 
 bool UZiplineRiderComponent::FindNearestZipline(AZiplineActor*& OutZipline, float& OutDist, int8& OutDir) const

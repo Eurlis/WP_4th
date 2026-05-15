@@ -535,6 +535,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Ability")
 	TObjectPtr<UTexture2D> UltIcon;
 
+	UPROPERTY()
+	AThrowableBase* PendingThrowable = nullptr;
+
+	FTimerHandle PendingThrowableCleanupTimer;
+
 	//Throw
 	UPROPERTY(EditAnywhere, Category= "Throwable|Anim")
 	UAnimMontage* ThrowMontage;

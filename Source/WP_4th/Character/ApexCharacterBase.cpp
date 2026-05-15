@@ -18,6 +18,7 @@
 #include "Net/UnrealNetwork.h"
 #include "OJJ_GameMode/ApexDeathmatchGameMode.h"
 #include "WP_4th.h"
+#include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 AApexCharacterBase::AApexCharacterBase()
@@ -966,11 +967,45 @@ void AApexCharacterBase::Multicast_PlayHoldAim_Implementation()
 
 void AApexCharacterBase::Server_StopThrowableAim_Implementation()
 {
+	// 2초 후 정리: 던지기 경로는 ThrowGrenade에서 PendingThrowable=null+타이머 취소
+	// 즉시 숨기지 않음 — ThrowMontage 재생 중에도 손에 보여야 함
+	GetWorldTimerManager().SetTimer(PendingThrowableCleanupTimer, [this]()
+	{
+		if (IsValid(PendingThrowable))
+		{
+			PendingThrowable->Destroy();
+			PendingThrowable = nullptr;
+		}
+	}, 2.0f, false);
+
 	Multicast_StopHoldAim();
 }
 
 void AApexCharacterBase::Server_StartThrowableAim_Implementation()
 {
+	// 오른손 소켓에 수류탄 미리 스폰+부착 (Hold 중 손에 보이도록)
+	if (GenericThrowableClass && !ActiveGrenadeID.IsNone() && !IsValid(PendingThrowable))
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = this;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		PendingThrowable = GetWorld()->SpawnActor<AThrowableBase>(
+			GenericThrowableClass, GetActorLocation(), FRotator::ZeroRotator, SpawnParams);
+
+		if (PendingThrowable)
+		{
+			PendingThrowable->InitFromDataTable(ActiveGrenadeID);
+			// 손에 든 동안 픽업 트리거 비활성 (PickupCollision이 근처 플레이어에 걸리는 것 방지)
+			PendingThrowable->PickupCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			PendingThrowable->AttachToComponent(
+				GetMesh(),
+				FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+				TEXT("hand_r")
+			);
+		}
+	}
 	Multicast_PlayHoldAim();
 }
 
@@ -1358,19 +1393,27 @@ void AApexCharacterBase::ThrowGrenade()
 	FRotator CameraRotation;
 	GetController()->GetPlayerViewPoint(CameraLocation, CameraRotation);
 
-	FVector SpawnLocation = CameraLocation + CameraRotation.Vector() * 100.f;
+	// hand_r에 미리 부착된 수류탄 사용, 없으면 폴백 스폰
+	AThrowableBase* Grenade = PendingThrowable;
+	PendingThrowable = nullptr;  // null 먼저 → 2초 클리어 타이머가 파괴 안 하도록
+	GetWorldTimerManager().ClearTimer(PendingThrowableCleanupTimer);
 
-	FActorSpawnParameters SpawnParams;
-	SpawnParams.Owner = this;
-	SpawnParams.Instigator = this;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	AThrowableBase* Grenade = GetWorld()->SpawnActor<AThrowableBase>(
-		GenericThrowableClass, SpawnLocation, CameraRotation, SpawnParams);
-
-	if (!Grenade) return;
-
-	Grenade->InitFromDataTable(ActiveGrenadeID);
+	if (!IsValid(Grenade))
+	{
+		FVector SpawnLocation = CameraLocation + CameraRotation.Vector() * 100.f;
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.Instigator = this;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Grenade = GetWorld()->SpawnActor<AThrowableBase>(
+			GenericThrowableClass, SpawnLocation, CameraRotation, SpawnParams);
+		if (!Grenade) return;
+		Grenade->InitFromDataTable(ActiveGrenadeID);
+	}
+	else
+	{
+		Grenade->SetActorHiddenInGame(false);  // 숨겨진 상태 해제 후 발사
+	}
 
 	FVector ThrowDirection = CameraRotation.Vector();
 	ThrowDirection.Z += 0.2f;
