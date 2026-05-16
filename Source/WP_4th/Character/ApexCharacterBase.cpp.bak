@@ -280,15 +280,6 @@ void AApexCharacterBase::Tick(float DeltaTime)
 		if (UltCooldownRemaining > 0.f)
 			UltCooldownRemaining = FMath::Max(0.f, UltCooldownRemaining - DeltaTime);
 	}
-
-	// === 신규: 궤적 미리보기 갱신 (로컬 컨트롤 only) ===
-	if (bIsAimingThrowable && PendingThrowable && IsLocallyControlled())
-	{
-		FVector CamLoc;
-		FRotator CamRot;
-		GetActorEyesViewPoint(CamLoc, CamRot);
-		PendingThrowable->UpdateAimPreview(CamLoc, CamRot);
-	}
 }
 
 void AApexCharacterBase::BeginPlay()
@@ -432,7 +423,6 @@ void AApexCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME_CONDITION(AApexCharacterBase, ActiveSlotIndex, COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AApexCharacterBase, GrenadeStock,    COND_OwnerOnly);
 	DOREPLIFETIME_CONDITION(AApexCharacterBase, ActiveGrenadeID, COND_OwnerOnly);
-	DOREPLIFETIME_CONDITION(AApexCharacterBase, PendingThrowable, COND_OwnerOnly);
 }
 
 void AApexCharacterBase::MoveInput(const FInputActionValue& Value)
@@ -1458,38 +1448,16 @@ void AApexCharacterBase::ThrowGrenade()
 	}
 }
 
-void AApexCharacterBase::OnRep_PendingThrowable()
-{
-	if (bIsAimingThrowable && PendingThrowable && IsLocallyControlled())
-	{
-		PendingThrowable->ShowAimPreview();
-	}
-}
-
 void AApexCharacterBase::StartThrowableAim()
 {
 	bIsAimingThrowable = true;
 	if (HoldMontage)
 		PlayAnimMontage(HoldMontage);
 	Server_StartThrowableAim();
-
-	// === 신규: 궤적 미리보기 시작 (로컬 컨트롤 only) ===
-	// PendingThrowable 은 Server_StartThrowableAim 안에서 스폰. 리슨서버 호스트는 즉시,
-	// 원격 클라는 OnRep 도착 후 Tick 에서 UpdateAimPreview 가 작동.
-	if (PendingThrowable && IsLocallyControlled())
-	{
-		PendingThrowable->ShowAimPreview();
-	}
 }
 
 void AApexCharacterBase::StopThrowableAim()
 {
-	// === 신규: 궤적 미리보기 정리 ===
-	if (PendingThrowable && IsLocallyControlled())
-	{
-		PendingThrowable->HideAimPreview();
-	}
-
 	bIsAimingThrowable = false;
 	if (HoldMontage)
 		StopAnimMontage(HoldMontage);

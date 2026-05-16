@@ -11,11 +11,6 @@ class UProjectileMovementComponent;
 class UDataTable;
 class AFireZone;
 class UNiagaraComponent;
-class USplineComponent;
-class USplineMeshComponent;
-class UDecalComponent;
-class UStaticMesh;
-class UMaterialInterface;
 
 UCLASS(Abstract)
 class WP_4TH_API AThrowableBase : public AItemBase
@@ -110,43 +105,6 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
-	// ===== Trajectory Preview (WeaponTestCharacter 미러링) =====
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Trajectory")
-	TObjectPtr<USplineComponent> TrajectorySpline;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Trajectory")
-	TObjectPtr<UDecalComponent> TargetMarkerDecal;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Trajectory|Visuals")
-	TObjectPtr<UStaticMesh> TrajectorySplineMesh;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Trajectory|Visuals")
-	TObjectPtr<UMaterialInterface> TrajectoryMeshMaterial;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Trajectory|Visuals")
-	TObjectPtr<UMaterialInterface> TargetMarkerMaterial;
-
-	UPROPERTY()
-	TArray<TObjectPtr<USplineMeshComponent>> TrajectoryMeshes;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Trajectory|Tuning")
-	float MaxTrajectorySimTime = 3.0f;
-
-	UPROPERTY(EditDefaultsOnly, Category = "Trajectory|Tuning")
-	float TrajectoryProjectileRadius = 5.0f;
-
-	UPROPERTY()
-	bool bIsPreviewActive = false;
-
-	UFUNCTION(BlueprintCallable, Category = "Trajectory")
-	void ShowAimPreview();
-
-	UFUNCTION(BlueprintCallable, Category = "Trajectory")
-	void HideAimPreview();
-
-	UFUNCTION(BlueprintCallable, Category = "Trajectory")
-	void UpdateAimPreview(const FVector& CamLoc, const FRotator& CamRot);
 
 protected:
 	FTimerHandle FuseTimerHandle;

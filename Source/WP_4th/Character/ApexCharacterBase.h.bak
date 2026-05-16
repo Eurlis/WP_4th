@@ -535,11 +535,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Ability")
 	TObjectPtr<UTexture2D> UltIcon;
 
-	UPROPERTY(ReplicatedUsing = OnRep_PendingThrowable, BlueprintReadOnly, Category = "Throwable")
+	UPROPERTY()
 	AThrowableBase* PendingThrowable = nullptr;
-
-	UFUNCTION()
-	void OnRep_PendingThrowable();
 
 	FTimerHandle PendingThrowableCleanupTimer;
 

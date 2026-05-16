@@ -2,12 +2,8 @@
 
 #include "ThrowableBase.h"
 #include "FireZone.h"
-#include "TrajectoryHelper.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/SplineComponent.h"
-#include "Components/SplineMeshComponent.h"
-#include "Components/DecalComponent.h"
 #include "Engine/StaticMesh.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -18,7 +14,6 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "NiagaraComponent.h"
-#include "Materials/MaterialInterface.h"
 
 AThrowableBase::AThrowableBase()
 {
@@ -39,23 +34,6 @@ AThrowableBase::AThrowableBase()
 	FuseTime = 2.0f;
 	ExplosionDamage = 80.f;
 	ExplosionRadius = 500.f; // 5m = 500 UU (1m ≈ 100 UU)
-
-	// === Trajectory Preview (WeaponTestCharacter 40~52 미러링) ===
-	TrajectorySpline = CreateDefaultSubobject<USplineComponent>(TEXT("TrajectorySpline"));
-	TrajectorySpline->SetupAttachment(RootComponent);
-	TrajectorySpline->SetMobility(EComponentMobility::Movable);
-	TrajectorySpline->SetUsingAbsoluteLocation(true);
-	TrajectorySpline->SetUsingAbsoluteRotation(true);
-	TrajectorySpline->SetUsingAbsoluteScale(true);
-	TrajectorySpline->ClearSplinePoints(false);
-
-	TargetMarkerDecal = CreateDefaultSubobject<UDecalComponent>(TEXT("TargetMarkerDecal"));
-	TargetMarkerDecal->SetupAttachment(RootComponent);
-	TargetMarkerDecal->SetUsingAbsoluteLocation(true);
-	TargetMarkerDecal->SetUsingAbsoluteRotation(true);
-	TargetMarkerDecal->SetUsingAbsoluteScale(true);
-	TargetMarkerDecal->SetVisibility(false);
-	TargetMarkerDecal->DecalSize = FVector(50.f, 50.f, 50.f);
 }
 
 void AThrowableBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -644,106 +622,6 @@ void AThrowableBase::MulticastPlayThrowSound_Implementation()
 			CurrentWeaponData.ThrowSound,
 			GetActorLocation()
 		);
-	}
-}
-
-// ==================== Trajectory Preview ====================
-// WeaponTestCharacter 1101~1196 미러링. 카메라 시점은 인자로 외부에서 주입.
-
-void AThrowableBase::ShowAimPreview()
-{
-	if (bIsPreviewActive) return;
-	bIsPreviewActive = true;
-
-	if (TargetMarkerDecal && TargetMarkerMaterial)
-	{
-		TargetMarkerDecal->SetDecalMaterial(TargetMarkerMaterial);
-	}
-}
-
-void AThrowableBase::HideAimPreview()
-{
-	if (!bIsPreviewActive) return;
-	bIsPreviewActive = false;
-
-	TrajectoryHelper::ClearTrajectory(TrajectorySpline, TrajectoryMeshes);
-	if (TargetMarkerDecal)
-	{
-		TargetMarkerDecal->SetVisibility(false);
-	}
-}
-
-void AThrowableBase::UpdateAimPreview(const FVector& CamLoc, const FRotator& CamRot)
-{
-	// Preview가 아직 시작 안 됐으면 자동 시작 (멀티플레이 동기화 fallback)
-	// 원격 클라이언트의 경우 StartThrowableAim 호출 시점에 PendingThrowable이 아직
-	// Replication으로 도착 전이라 ShowAimPreview hook이 호출되지 못함.
-	if (!bIsPreviewActive)
-	{
-		ShowAimPreview();
-	}
-	if (!TrajectorySpline || !GetWorld()) return;
-
-	// CurrentWeaponData 가 아직 비어있을 경우(클라 OnRep 도착 전) 인스턴스 기본 ThrowForce/1.0 fallback
-	const float UseThrowForce = CurrentWeaponData.ThrowForce > 0.f
-		? CurrentWeaponData.ThrowForce
-		: ThrowForce;
-	const float UseGravityScale = CurrentWeaponData.ThrowableGravityScale > 0.f
-		? CurrentWeaponData.ThrowableGravityScale
-		: 1.f;
-
-	// 시작점은 손에 부착된 수류탄 메시(=Actor Root) 위치. Velocity 방향만 카메라 기반.
-	const FVector StartLocation = GetActorLocation();
-	FVector ThrowDirection = CamRot.Vector();
-	ThrowDirection.Z += 0.2f;
-	ThrowDirection.Normalize();
-
-	const FVector LaunchVelocity = ThrowDirection * UseThrowForce;
-
-	FPredictProjectilePathParams PredictParams(
-		TrajectoryProjectileRadius,
-		StartLocation,
-		LaunchVelocity,
-		MaxTrajectorySimTime);
-
-	PredictParams.bTraceWithCollision = true;
-	PredictParams.bTraceComplex = false;
-	PredictParams.ActorsToIgnore.Add(this);
-	if (AActor* InstigatorActor = GetInstigator())
-	{
-		PredictParams.ActorsToIgnore.Add(InstigatorActor);
-	}
-	if (AActor* OwnerActor = GetOwner())
-	{
-		PredictParams.ActorsToIgnore.Add(OwnerActor);
-	}
-	PredictParams.SimFrequency = 15.f;
-	PredictParams.OverrideGravityZ = -980.f * UseGravityScale;
-	PredictParams.TraceChannel = ECC_Visibility;
-
-	FPredictProjectilePathResult Result;
-	UGameplayStatics::PredictProjectilePath(this, PredictParams, Result);
-
-	TrajectoryHelper::UpdateSplineFromPath(
-		TrajectorySpline,
-		TrajectoryMeshes,
-		Result.PathData,
-		TrajectorySplineMesh,
-		TrajectoryMeshMaterial,
-		this);
-
-	if (TargetMarkerDecal)
-	{
-		const bool bBlockingHit = Result.HitResult.bBlockingHit;
-		const FVector LandingPoint = bBlockingHit
-			? Result.HitResult.ImpactPoint
-			: Result.LastTraceDestination.Location;
-		const FVector LandingNormal = bBlockingHit
-			? Result.HitResult.ImpactNormal
-			: FVector::UpVector;
-
-		TargetMarkerDecal->SetWorldLocationAndRotation(LandingPoint, LandingNormal.Rotation());
-		TargetMarkerDecal->SetVisibility(bBlockingHit);
 	}
 }
 
