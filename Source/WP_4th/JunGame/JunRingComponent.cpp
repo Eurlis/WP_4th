@@ -79,7 +79,6 @@ void UJunRingComponent::BeginPlay()
 		{
 			Owner->SetReplicates(true);
 			Owner->SetNetUpdateFrequency(FMath::Max(Owner->GetNetUpdateFrequency(), 15.f));
-			UE_LOG(LogTemp, Log, TEXT("JunRingComponent: enabled replication on owner %s for client ring sync."), *GetNameSafe(Owner));
 		}
 	}
 
@@ -153,16 +152,12 @@ void UJunRingComponent::StartRing()
 
 	if (!ReloadRingData())
 	{
-		UE_LOG(LogTemp, Error, TEXT("JunRingComponent: StartRing failed because ring phase data is invalid. Owner=%s"), *GetNameSafe(GetOwner()));
+		UE_LOG(LogTemp, VeryVerbose, TEXT("JunRingComponent: StartRing failed because ring phase data is invalid. Owner=%s"), *GetNameSafe(GetOwner()));
 		return;
 	}
 
 	bRingStarted = true;
 	bIsPaused = false;
-	UE_LOG(LogTemp, Log, TEXT("JunRingComponent: StartRing. Owner=%s InitialRadius=%.2f PhaseCount=%d"),
-		*GetNameSafe(GetOwner()),
-		InitialRadius,
-		RingPhases.Num());
 	BeginPhase(0);
 }
 
@@ -193,7 +188,7 @@ bool UJunRingComponent::InitFromPhaseRows(const TArray<FJunRingPhaseRow>& InRows
 	FString ValidationError;
 	if (!ValidateRingPhases(CandidateRows, ValidationError))
 	{
-		UE_LOG(LogTemp, Error, TEXT("JunRingComponent: InitFromPhaseRows failed. %s"), *ValidationError);
+		UE_LOG(LogTemp, VeryVerbose, TEXT("JunRingComponent: InitFromPhaseRows failed. %s"), *ValidationError);
 		return false;
 	}
 
@@ -317,7 +312,7 @@ bool UJunRingComponent::ReloadRingData()
 	FString ValidationError;
 	if (!ValidateRingPhases(RingPhases, ValidationError))
 	{
-		UE_LOG(LogTemp, Error, TEXT("JunRingComponent: invalid ring phase data. %s"), *ValidationError);
+		UE_LOG(LogTemp, VeryVerbose, TEXT("JunRingComponent: invalid ring phase data. %s"), *ValidationError);
 		return false;
 	}
 
@@ -361,7 +356,7 @@ void UJunRingComponent::LoadRingPhasesFromDataTable()
 	RingPhaseDataTable->GetAllRows(TEXT("JunRingPhaseDataLoad"), Rows);
 	if (Rows.IsEmpty())
 	{
-		UE_LOG(LogTemp, Error, TEXT("JunRingComponent: RingPhaseDataTable has no rows. Table=%s"), *GetNameSafe(RingPhaseDataTable));
+		UE_LOG(LogTemp, VeryVerbose, TEXT("JunRingComponent: RingPhaseDataTable has no rows. Table=%s"), *GetNameSafe(RingPhaseDataTable));
 		return;
 	}
 
@@ -412,13 +407,6 @@ void UJunRingComponent::NormalizeDefaultPhasesForInitialRadius()
 		Phase.ShrinkTime = FMath::Min(Phase.ShrinkTime, 8.f);
 	}
 
-	if (bLogValidationDetails)
-	{
-		UE_LOG(LogTemp, Log, TEXT("JunRingComponent: scaled built-in ring phases for InitialRadius %.2f with scale %.3f. Owner=%s"),
-			InitialRadius,
-			RadiusScale,
-			*GetNameSafe(GetOwner()));
-	}
 }
 
 bool UJunRingComponent::ValidateRingPhases(const TArray<FJunRingPhaseRow>& CandidatePhases, FString& OutReason) const
@@ -467,11 +455,6 @@ bool UJunRingComponent::ValidateRingPhases(const TArray<FJunRingPhaseRow>& Candi
 		++ExpectedPhaseIndex;
 	}
 
-	if (bLogValidationDetails)
-	{
-		UE_LOG(LogTemp, Log, TEXT("JunRingComponent: validated %d ring phases for %s."), CandidatePhases.Num(), *GetNameSafe(GetOwner()));
-	}
-
 	return true;
 }
 
@@ -500,13 +483,6 @@ void UJunRingComponent::BeginPhase(int32 PhaseIndex)
 	PhaseTargetRadius = Phase.TargetRadius;
 	const float WaitTime = GetPhaseWaitTime(Phase);
 	PhaseStateEndTime = GetRingWorldTime() + WaitTime;
-	UE_LOG(LogTemp, Log, TEXT("JunRingComponent: BeginPhase %d. CurrentRadius=%.2f TargetRadius=%.2f Wait=%.2f Shrink=%.2f Owner=%s"),
-		CurrentPhaseIndex,
-		CurrentRadius,
-		PhaseTargetRadius,
-		WaitTime,
-		GetPhaseShrinkTime(Phase),
-		*GetNameSafe(GetOwner()));
 	GetOwner()->ForceNetUpdate();
 
 	GetWorld()->GetTimerManager().SetTimer(
@@ -548,12 +524,6 @@ void UJunRingComponent::StartShrinkForCurrentPhase()
 	PhaseStateEndTime = ShrinkEndTime;
 	bIsShrinking = true;
 	PhaseState = EJunRingPhaseState::Shrinking;
-	UE_LOG(LogTemp, Log, TEXT("JunRingComponent: StartShrink phase %d from %.2f to %.2f over %.2f seconds. Owner=%s"),
-		CurrentPhaseIndex,
-		PhaseStartRadius,
-		PhaseTargetRadius,
-		ShrinkTime,
-		*GetNameSafe(GetOwner()));
 	GetOwner()->ForceNetUpdate();
 
 	if (ShrinkTime <= 0.f)
@@ -581,10 +551,6 @@ void UJunRingComponent::CompletePhase()
 	CurrentRadius = RingPhases[CurrentPhaseIndex].TargetRadius;
 	bIsShrinking = false;
 	PhaseState = EJunRingPhaseState::Completed;
-	UE_LOG(LogTemp, Log, TEXT("JunRingComponent: CompletePhase %d. Radius=%.2f Owner=%s"),
-		CurrentPhaseIndex,
-		CurrentRadius,
-		*GetNameSafe(GetOwner()));
 	GetOwner()->ForceNetUpdate();
 
 	const int32 NextPhaseIndex = CurrentPhaseIndex + 1;
