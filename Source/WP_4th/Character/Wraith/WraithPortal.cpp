@@ -23,6 +23,7 @@ AWraithPortal::AWraithPortal()
 	PortalVFX = CreateDefaultSubobject<UNiagaraComponent>(TEXT("PortalVFX"));
 	PortalVFX->SetupAttachment(RootComponent);
 	PortalVFX->SetIsReplicated(true);
+	PortalVFX->SetRelativeScale3D(FVector(0.5f));
 
 	PortalSpline = CreateDefaultSubobject<USplineComponent>(TEXT("PortalSpline"));
 	PortalSpline->SetupAttachment(RootComponent);
