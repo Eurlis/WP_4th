@@ -2,7 +2,9 @@
 
 #include "ApexDeathmatchGameState.h"
 #include "ApexDeathmatchPlayerState.h"
+#include "Character/ApexPlayerController.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/PlayerState.h"
 #include "JunGame/JunDeathmatchGameState.h"
@@ -121,6 +123,26 @@ void AApexDeathmatchGameMode::HandleMatchHasStarted()
 		return;
 	}
 	bMatchTimeExpired = false;
+
+	if (AApexDeathmatchGameState* GS = GetGameState<AApexDeathmatchGameState>())
+	{
+		GS->MatchStartServerTime = GetWorld()->GetTimeSeconds();
+		GS->MatchDurationReplicated = MatchDuration;
+		UE_LOG(LogTemp, Warning,
+			TEXT("[ApexGM] GS Cast OK: ptr=%p name=%s class=%s StartTime=%.3f Duration=%.1f NetMode=%d"),
+			GS, *GS->GetName(), *GS->GetClass()->GetName(),
+			GS->MatchStartServerTime, GS->MatchDurationReplicated,
+			(int32)GetNetMode());
+	}
+	else
+	{
+		AGameStateBase* AnyGS = GetGameState<AGameStateBase>();
+		UE_LOG(LogTemp, Error,
+			TEXT("[ApexGM] GS Cast FAILED. Actual class=%s NetMode=%d"),
+			AnyGS ? *AnyGS->GetClass()->GetName() : TEXT("NULL"),
+			(int32)GetNetMode());
+	}
+
 	GetWorldTimerManager().SetTimer(
 		MatchTimerHandle, this,
 		&AApexDeathmatchGameMode::OnMatchTimeUp,
@@ -168,6 +190,23 @@ void AApexDeathmatchGameMode::OnMatchTimeUp()
 
 	UE_LOG(LogTemp, Log, TEXT("[ApexGM] Match time up — Winner=%s Kills=%d"),
 		Winner ? *Winner->GetName() : TEXT("None"), WinnerKills);
+
+	if (Winner && Winner->PlayerState)
+	{
+		if (AJunDeathmatchGameState* JunGS = GetGameState<AJunDeathmatchGameState>())
+		{
+			JunGS->SetWinningPlayerState(Winner->PlayerState);
+		}
+	}
+
+	APlayerState* WinnerPS = Winner ? Winner->PlayerState : nullptr;
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (AApexPlayerController* ApexPC = Cast<AApexPlayerController>(It->Get()))
+		{
+			ApexPC->ClientShowMatchResult(WinnerPS, WinnerKills);
+		}
+	}
 
 	BP_OnMatchEnded(Winner, WinnerKills);
 	EndMatch();

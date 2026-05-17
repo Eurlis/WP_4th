@@ -1,5 +1,6 @@
 #include "JunGame/JunDeathmatchGameMode.h"
 
+#include "Character/ApexPlayerController.h"
 #include "Character/Components/HPComp/HealthComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
@@ -214,6 +215,21 @@ void AJunDeathmatchGameMode::FinishMatch(AController* WinningController)
 	if (AJunDeathmatchGameState* JunGameState = GetGameState<AJunDeathmatchGameState>())
 	{
 		JunGameState->SetWinningPlayerState(WinningController ? WinningController->PlayerState : nullptr);
+	}
+
+	APlayerState* WinnerPS = WinningController ? WinningController->PlayerState : nullptr;
+	int32 WinnerKills = 0;
+	if (AJunDeathmatchPlayerState* JunPS = Cast<AJunDeathmatchPlayerState>(WinnerPS))
+	{
+		WinnerKills = JunPS->GetEliminations();
+	}
+
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (AApexPlayerController* ApexPC = Cast<AApexPlayerController>(It->Get()))
+		{
+			ApexPC->ClientShowMatchResult(WinnerPS, WinnerKills);
+		}
 	}
 
 	EndMatch();

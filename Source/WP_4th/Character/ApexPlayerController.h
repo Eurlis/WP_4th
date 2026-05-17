@@ -8,6 +8,8 @@
 #include "GameFramework/PlayerController.h"
 #include "ApexPlayerController.generated.h"
 
+class UUserWidget;
+
 /**
  *
  */
@@ -22,5 +24,18 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category="UI")
 	void ShowHitMarker(EHitSoundType HitSoundType);
 
+	UFUNCTION(Client, Reliable)
+	void ClientShowMatchResult(APlayerState* WinnerPS, int32 WinnerKills);
 
+	UFUNCTION(BlueprintImplementableEvent, Category="Match")
+	void BP_OnShowMatchResult(APlayerState* WinnerPS, int32 WinnerKills);
+
+protected:
+	virtual void BeginPlay() override;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI|MatchTimer")
+	TSubclassOf<UUserWidget> MatchTimerWidgetClass;
+
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "UI|MatchTimer")
+	TObjectPtr<UUserWidget> MatchTimerWidget;
 };
