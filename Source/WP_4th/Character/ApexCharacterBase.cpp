@@ -1300,9 +1300,14 @@ void AApexCharacterBase::ServerAddWeaponToSlot_Implementation(FName WeaponID)
 		TryAddGrenadeAuth(WeaponID);
 		return;
 	}
+	else if (Category == EWeaponType::Pistol)
+	{
+		// 권총 → 3번 슬롯 전용 (기존 권총 있으면 교체)
+		TargetSlot = (int32)EWeaponSlotType::Pistol;
+	}
 	else
 	{
-		// Pistol 포함 모든 총기류 → Main1(0) 또는 Main2(1)
+		// 소총/산탄총/저격 → Main1(0) 또는 Main2(1)
 		if (IsSlotEmpty((int32)EWeaponSlotType::Main1))
 			TargetSlot = (int32)EWeaponSlotType::Main1;
 		else if (IsSlotEmpty((int32)EWeaponSlotType::Main2))
