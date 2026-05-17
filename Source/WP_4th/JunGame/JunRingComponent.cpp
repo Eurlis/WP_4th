@@ -107,18 +107,12 @@ void UJunRingComponent::TickComponent(float DeltaTime, enum ELevelTick TickType,
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!GetOwner() || !bRingStarted || !bIsShrinking)
+	if (GetOwner() && bRingStarted && bIsShrinking)
 	{
-		if (bEnableDebugDraw && GetWorld())
-		{
-			DrawDebugSphere(GetWorld(), RingCenter, CurrentRadius, 64, FColor::Cyan, false, DebugDrawDuration, 0, 4.f);
-		}
-		return;
+		UpdateCurrentRadiusFromShrinkTime();
 	}
 
-	UpdateCurrentRadiusFromShrinkTime();
-
-	if (bEnableDebugDraw)
+	if (bEnableDebugDraw && GetWorld())
 	{
 		DrawDebugSphere(GetWorld(), RingCenter, CurrentRadius, 64, FColor::Cyan, false, DebugDrawDuration, 0, 4.f);
 	}
