@@ -5,7 +5,6 @@ AJunRingActor::AJunRingActor()
 	bReplicates = true;
 	bAlwaysRelevant = true;
 	SetReplicateMovement(false);
-	SetNetUpdateFrequency(30.f);
 
 	RingComponent = CreateDefaultSubobject<UJunRingComponent>(TEXT("RingComponent"));
 	if (RingComponent)
