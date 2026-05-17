@@ -19,6 +19,7 @@
 #include "OJJ_GameMode/ApexDeathmatchGameMode.h"
 #include "WP_4th.h"
 #include "Components/SphereComponent.h"
+#include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 AApexCharacterBase::AApexCharacterBase()
@@ -81,6 +82,17 @@ AApexCharacterBase::AApexCharacterBase()
 	MotionWarpingComp = CreateDefaultSubobject<UMotionWarpingComponent>(TEXT("MotionWarping"));
 	ZiplineComp = CreateDefaultSubobject<UZiplineRiderComponent>(TEXT("ZiplineComp"));
 	InteractionComp = CreateDefaultSubobject<UInteractionComponent>(TEXT("InteractionComp"));
+
+	AC_Sprint    = CreateDefaultSubobject<UAudioComponent>(TEXT("AC_Sprint"));
+	AC_WallClimb = CreateDefaultSubobject<UAudioComponent>(TEXT("AC_WallClimb"));
+	AC_Slide     = CreateDefaultSubobject<UAudioComponent>(TEXT("AC_Slide"));
+	AC_Zipline   = CreateDefaultSubobject<UAudioComponent>(TEXT("AC_Zipline"));
+
+	for (UAudioComponent* AC : {AC_Sprint, AC_WallClimb, AC_Slide, AC_Zipline})
+	{
+		AC->SetupAttachment(GetRootComponent());
+		AC->bAutoActivate = false;
+	}
 
 
 	//Weapon Setting
@@ -265,6 +277,7 @@ void AApexCharacterBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	TickSlide(DeltaTime);
+	TickMovementSounds();
 
 	if (IsPlayerControlled() && FirstPersonCameraComponent)
 	{
@@ -781,11 +794,8 @@ void AApexCharacterBase::TickSlide(float DeltaTime)
 		return;
 	}
 
-	// 수평 방향으로만 velocity 설정 — movement component가 slope following 처리
-	FVector HorizDir = FVector(MoveDirection.X, MoveDirection.Y, 0.f).GetSafeNormal();
-	if (HorizDir.IsNearlyZero())
-		HorizDir = FVector(SlideDirection.X, SlideDirection.Y, 0.f).GetSafeNormal();
-	MovementComponent->Velocity = HorizDir * SlideSpeed;
+	// 경사면 위 방향으로 velocity 설정 (XY만 뽑으면 매 프레임 방향이 왜곡됨)
+	MovementComponent->Velocity = MoveDirection * SlideSpeed;
 
 	if (SlideSpeed < SlideMinSpeed && DownhillAlignment <= 0.05f)
 	{
@@ -1653,6 +1663,63 @@ bool AApexCharacterBase::RemoveGrenadeStock(FName GrenadeID, int32 Amount)
 		}
 	}
 	return false;
+}
+
+void AApexCharacterBase::Multicast_PlayTacticalSound_Implementation()
+{
+	if (Sound_TacticalActivate)
+		UGameplayStatics::SpawnSoundAtLocation(this, Sound_TacticalActivate, GetActorLocation());
+}
+
+void AApexCharacterBase::Multicast_PlayUltSound_Implementation()
+{
+	if (Sound_UltActivate)
+		UGameplayStatics::SpawnSoundAtLocation(this, Sound_UltActivate, GetActorLocation());
+}
+
+void AApexCharacterBase::TickMovementSounds()
+{
+	auto SetLoop = [](UAudioComponent* AC, USoundBase* Sound, bool bShouldPlay)
+	{
+		if (!AC || !Sound) return;
+		if (bShouldPlay)
+		{
+			if (!AC->IsPlaying())
+			{
+				AC->SetSound(Sound);
+				AC->Play();
+			}
+		}
+		else
+		{
+			if (AC->IsPlaying()) AC->Stop();
+		}
+	};
+
+	const UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	const bool bOnGround = MoveComp && MoveComp->IsMovingOnGround();
+	const bool bMoving   = GetVelocity().SizeSquared2D() > 100.f;
+
+	// 달리기
+	SetLoop(AC_Sprint, Sound_Sprint, bIsSprinting && bOnGround && bMoving);
+
+	// 벽 오르기 (WallClimb / ClimbingUp / WallSlide 상태)
+	bool bClimbing = false;
+	if (PakComp)
+	{
+		const EParkourState PS = PakComp->GetParkourState();
+		bClimbing = (PS == EParkourState::WallClimb
+				  || PS == EParkourState::ClimbingUp
+				  || PS == EParkourState::WallSlide);
+	}
+	SetLoop(AC_WallClimb, Sound_WallClimb, bClimbing);
+
+	// 슬라이딩
+	SetLoop(AC_Slide, Sound_Slide, bIsSliding);
+
+	// 레펠 (집라인)
+	const bool bZiplining = ZiplineComp && ZiplineComp->IsRidingZipline();
+	SetLoop(AC_Zipline, Sound_Zipline, bZiplining);
 }
 
 void AApexCharacterBase::SwitchToFirstAvailableSlot()
