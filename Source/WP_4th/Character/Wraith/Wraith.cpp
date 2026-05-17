@@ -7,6 +7,7 @@
 #include "Algo/Reverse.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
 
@@ -130,6 +131,8 @@ void AWraith::OnRep_IsInVoid()
 void AWraith::EnterVoid()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[Wraith] Into the Void 진입!"));
+	if (Sound_TacticalActivate)
+		UGameplayStatics::SpawnSoundAtLocation(this, Sound_TacticalActivate, GetActorLocation());
 
 	/*VoidMaterials.Empty();
 	for (int32 i =0; i< GetMesh()->GetNumMaterials(); i++)
@@ -198,6 +201,7 @@ void AWraith::Server_ActivateUltimate_Implementation()
 	{
 		PortalALocation = GetActorLocation();
 		bPlacingPortal = true;
+		Multicast_PlayUltSound();
 		UE_LOG(LogTemp, Warning, TEXT("[Wraith Ult] Portal A 저장: %s "), *PortalALocation.ToString());
 
 		RecordedPath.Empty();

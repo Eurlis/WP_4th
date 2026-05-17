@@ -19,6 +19,7 @@ class AWeaponBase;
 class UInteractionComponent;
 class AThrowableBase;
 class APickupBase;
+class UAudioComponent;
 
 UENUM(BlueprintType)
 enum class ESlideAnimationPhase : uint8
@@ -417,6 +418,8 @@ private:
 	void RestoreDefaultMovementSettings();
 	void TickSlide(float DeltaTime);
 
+	void TickMovementSounds();
+
 	FVector SlideDirection;
 	float SlideSpeed;
 	float SlideEnterEndTime;
@@ -513,6 +516,44 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Sound|HitFeedback")
 	TObjectPtr<USoundBase> HitSound_Downed;
 
+
+	// ─── Ability Sounds ───────────────────────────────────────────
+	UPROPERTY(EditDefaultsOnly, Category="Sound|Ability")
+	TObjectPtr<USoundBase> Sound_TacticalActivate;
+
+	UPROPERTY(EditDefaultsOnly, Category="Sound|Ability")
+	TObjectPtr<USoundBase> Sound_UltActivate;
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_PlayTacticalSound();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void Multicast_PlayUltSound();
+
+	// ─── Movement Sounds ──────────────────────────────────────────
+	UPROPERTY(EditDefaultsOnly, Category="Sound|Movement")
+	TObjectPtr<USoundBase> Sound_Sprint;
+
+	UPROPERTY(EditDefaultsOnly, Category="Sound|Movement")
+	TObjectPtr<USoundBase> Sound_WallClimb;
+
+	UPROPERTY(EditDefaultsOnly, Category="Sound|Movement")
+	TObjectPtr<USoundBase> Sound_Slide;
+
+	UPROPERTY(EditDefaultsOnly, Category="Sound|Movement")
+	TObjectPtr<USoundBase> Sound_Zipline;
+
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> AC_Sprint;
+
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> AC_WallClimb;
+
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> AC_Slide;
+
+	UPROPERTY()
+	TObjectPtr<UAudioComponent> AC_Zipline;
 
 	// HP UI
 	UFUNCTION(Client, Reliable)

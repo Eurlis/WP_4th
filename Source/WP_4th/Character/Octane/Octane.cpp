@@ -5,6 +5,7 @@
 
 #include "Character/Components/HPComp/HealthComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 
 
@@ -166,6 +167,7 @@ void AOctane::Server_ActivateUltimate_Implementation()
 
 	if (bUltimateOnCooldown || !LaunchPadClass) return;
 
+	Multicast_PlayUltSound();
 	FVector SpawnLoc = GetActorLocation() - FVector(0, 0, 90.f);
 	FRotator SpawnRot = FRotator(0, GetActorRotation().Yaw, 0);
 
@@ -191,6 +193,7 @@ void AOctane::Server_ActivateStim_Implementation()
 	HealthComponent->Health -= HpCost;
 	HealthComponent->OnHealthChanged.Broadcast(HealthComponent->Health, HealthComponent->MaxHealth);
 
+	Multicast_PlayTacticalSound();
 	EnterStim();
 }
 
