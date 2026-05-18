@@ -233,8 +233,8 @@ void AWraith::Server_ActivateUltimate_Implementation()
 			PortalA->SetPathAndLink(RecordedPath, PortalB);
 			PortalB->SetPathAndLink(ReversedPath, PortalA);
 
-			DrawDebugSphere(GetWorld(), PortalALocation, 100.f, 12, FColor::Red, false, 10.f);
-			DrawDebugSphere(GetWorld(), GetActorLocation(), 100.f, 12, FColor::Blue, false, 10.f);
+			// DrawDebugSphere(GetWorld(), PortalALocation, 100.f, 12, FColor::Red, false, 10.f);
+			// DrawDebugSphere(GetWorld(), GetActorLocation(), 100.f, 12, FColor::Blue, false, 10.f);
 			GetWorldTimerManager().SetTimer(UltimateDurationTimer, this, &AWraith::DeactivatePortals, UltimateDuration, false);
 
 			UE_LOG(LogTemp, Log, TEXT("[Wraith Ult] 포탈 On"));
