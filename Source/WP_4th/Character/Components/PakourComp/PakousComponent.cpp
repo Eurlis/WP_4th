@@ -104,11 +104,11 @@ void UPakousComponent::DetectWall()
 	const bool bChestHit  = GetWorld()->LineTraceSingleByChannel(ChestHit,  ChestStart, ChestEnd,  ECC_Visibility, Params);
 	const bool bEyeHit    = GetWorld()->LineTraceSingleByChannel(EyeHit,    EyeStart,   EyeEnd,    ECC_Visibility, Params);
 
-#if WITH_EDITOR
-	DrawDebugLine(GetWorld(), WaistStart, WaistEnd, bWaistHit ? FColor::Green : FColor::Yellow, false, -1.f, 0, 1.f);
-	DrawDebugLine(GetWorld(), ChestStart, ChestEnd, bChestHit ? FColor::Green : FColor::Red,    false, -1.f, 0, 1.f);
-	DrawDebugLine(GetWorld(), EyeStart,   EyeEnd,   bEyeHit   ? FColor::Green : FColor::Blue,   false, -1.f, 0, 1.f);
-#endif
+// #if WITH_EDITOR
+// 	DrawDebugLine(GetWorld(), WaistStart, WaistEnd, bWaistHit ? FColor::Green : FColor::Yellow, false, -1.f, 0, 1.f);
+// 	DrawDebugLine(GetWorld(), ChestStart, ChestEnd, bChestHit ? FColor::Green : FColor::Red,    false, -1.f, 0, 1.f);
+// 	DrawDebugLine(GetWorld(), EyeStart,   EyeEnd,   bEyeHit   ? FColor::Green : FColor::Blue,   false, -1.f, 0, 1.f);
+// #endif
 
 	// 허리 또는 가슴 트레이스가 닿으면 벽 감지
 	bWallForward = bWaistHit || bChestHit;
@@ -416,12 +416,12 @@ bool UPakousComponent::TryClimbUp()
 
 	ClimbTargetPos = CandidatePos;
 
-#if WITH_EDITOR
-	DrawDebugLine(GetWorld(), TopSearchStart, TopSearchEnd, FColor::Orange, false, 3.f);
-	DrawDebugSphere(GetWorld(), EdgeHit.ImpactPoint, 8.f, 6, FColor::Yellow, false, 3.f);
-	DrawDebugLine(GetWorld(), OverEdge, DropEnd, FColor::Magenta, false, 3.f);
-	DrawDebugSphere(GetWorld(), ClimbTargetPos, 15.f, 8, FColor::Cyan, false, 3.f);
-#endif
+// #if WITH_EDITOR
+// 	DrawDebugLine(GetWorld(), TopSearchStart, TopSearchEnd, FColor::Orange, false, 3.f);
+// 	DrawDebugSphere(GetWorld(), EdgeHit.ImpactPoint, 8.f, 6, FColor::Yellow, false, 3.f);
+// 	DrawDebugLine(GetWorld(), OverEdge, DropEnd, FColor::Magenta, false, 3.f);
+// 	DrawDebugSphere(GetWorld(), ClimbTargetPos, 15.f, 8, FColor::Cyan, false, 3.f);
+// #endif
 
 	UE_LOG(LogTemp, Log, TEXT("[Parkour] TryClimbUp target=%s"), *ClimbTargetPos.ToString());
 
