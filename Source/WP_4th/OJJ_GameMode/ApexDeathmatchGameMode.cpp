@@ -150,6 +150,22 @@ void AApexDeathmatchGameMode::HandleMatchHasStarted()
 	UE_LOG(LogTemp, Log, TEXT("[ApexGM] Match timer started: %.1fs"), MatchDuration);
 }
 
+void AApexDeathmatchGameMode::ForceEndMatch()
+{
+	if (!HasAuthority() || bMatchTimeExpired || !IsMatchInProgress())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[ApexGM] ForceEndMatch ignored (HasAuthority=%d Expired=%d InProgress=%d)"),
+			HasAuthority() ? 1 : 0,
+			bMatchTimeExpired ? 1 : 0,
+			IsMatchInProgress() ? 1 : 0);
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[ApexGM] ForceEndMatch — host triggered immediate end"));
+	GetWorldTimerManager().ClearTimer(MatchTimerHandle);
+	OnMatchTimeUp();
+}
+
 void AApexDeathmatchGameMode::OnMatchTimeUp()
 {
 	if (!HasAuthority() || bMatchTimeExpired)

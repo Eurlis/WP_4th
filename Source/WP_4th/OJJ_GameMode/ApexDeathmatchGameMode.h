@@ -23,6 +23,10 @@ public:
 	// UHT 규칙상 자식에서는 UFUNCTION() 재선언 불가 — Blueprint 카테고리는 부모 정의를 그대로 사용.
 	void RequestRespawn(AController* EliminatedController);
 
+	// 시연 비상용: 호스트가 즉시 매치 종료. 기존 OnMatchTimeUp 경로를 그대로 재사용.
+	UFUNCTION(BlueprintCallable, Exec, Category = "Apex|Match")
+	void ForceEndMatch();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void HandleMatchHasStarted() override;
