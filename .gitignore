@@ -100,8 +100,8 @@ Plugins/**/Intermediate/*
 
 .itea/
 
-Content/__ExternalActors__/
-Content/__ExternalObjects__/
+# Content/__ExternalActors__/
+# Content/__ExternalObjects__/
 
 Config/DefaultEditorPerProjectUserSettings.ini
 
