@@ -14,7 +14,7 @@ enum class EParkourState : uint8
 	WallAttach,
 	WallClimb,
 	WallSlide,
-	ClimbingUp   // 벽 상단으로 실제 이동 중
+	ClimbingUp
 };
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -30,13 +30,18 @@ protected:
 
 public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	// --- Public API (ApexCharacterBase 호환) ---
+	// 점프 입력 처리. 클라이언트에서 호출하면 내부적으로 Server RPC 전송
 	bool TryHandleJump();
 	bool TryParkour();
 	bool TryClimbUp();
 	void ExitClimb(bool bJumpOff);
 	void TriggerWallJump();
+
+	// 멀티플레이 안전한 클라이밍 입력 설정. 직접 필드 접근 대신 이 함수 사용
+	void SetClimbInput(bool bHeld);
 
 	UFUNCTION(BlueprintCallable)
 	bool GetIsClimbing() const;
@@ -45,9 +50,6 @@ public:
 	EParkourState GetParkourState() const { return ParkourState; }
 
 	bool CanWallJump() const;
-
-	// ApexCharacterBase에서 Jump Hold 여부를 쓰기
-	bool bClimbInputHeld = false;
 
 	// --- Tuning Parameters ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Parkour|Attach")
@@ -77,7 +79,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Parkour|Attach")
 	float ExitCooldown = 0.3f;
 
-	// ClimbUp 몽타주 (BP에서 할당, 없어도 동작함)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Parkour|Animation")
 	UAnimMontage* ClimbUpMontage = nullptr;
 
@@ -85,16 +86,36 @@ public:
 	float ClimbUpDuration = 0.45f;
 
 private:
-	// --- Internal State ---
+	// --- Server RPCs ---
+	UFUNCTION(Server, Reliable)
+	void ServerTryHandleJump();
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetClimbInput(bool bHeld);
+
+	// --- RepNotify ---
+	UFUNCTION()
+	void OnRep_ParkourState();
+
+	// --- Replicated State ---
+	UPROPERTY(ReplicatedUsing=OnRep_ParkourState)
 	EParkourState ParkourState = EParkourState::None;
 
+	UPROPERTY(Replicated)
+	FVector ClimbStartPos = FVector::ZeroVector;
+
+	UPROPERTY(Replicated)
+	FVector ClimbTargetPos = FVector::ZeroVector;
+
+	// --- Local State (서버 전용, 복제 불필요) ---
 	FVector WallNormal = FVector::ZeroVector;
 	FVector WallHitLocation = FVector::ZeroVector;
-	FVector ClimbTargetPos = FVector::ZeroVector;
 
 	bool bWallForward = false;
 	bool bWallTall = false;
 	float WallHeight = 0.f;
+
+	bool bClimbInputHeld = false;
 
 	float AttachTimer = 0.f;
 	float ClimbTimer = 0.f;
@@ -102,9 +123,7 @@ private:
 	float ExitCooldownTimer = 0.f;
 	float ClimbUpTimer = 0.f;
 
-	FVector ClimbStartPos = FVector::ZeroVector;
-
-	bool bHasWallJumped = false;  // 착지 전까지 1회만 허용
+	bool bHasWallJumped = false;
 
 	// --- Cached References ---
 	ACharacter* OwnerChar = nullptr;
@@ -130,7 +149,6 @@ private:
 	void EnterClimbingUp();
 	void TickClimbingUp(float DeltaTime);
 
-	// 벽 에지 위 착지 지점 탐색 — 성공 시 OutTarget 설정 후 true 반환
 	bool FindClimbTarget(FVector& OutTarget);
 
 	void SetParkourState(EParkourState NewState);

@@ -488,7 +488,7 @@ void AApexCharacterBase::DoJumpStart()
 void AApexCharacterBase::DoJumpEnd()
 {
 	StopJumping();
-	if (PakComp) PakComp->bClimbInputHeld = false;
+	if (PakComp) PakComp->SetClimbInput(false);
 }
 
 float AApexCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
